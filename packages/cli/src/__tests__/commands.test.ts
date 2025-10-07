@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
 import { createTask } from '../commands/create-task';
 import { updateStatus } from '../commands/update-status';
 import { listTasks } from '../commands/list-tasks';
@@ -388,6 +387,35 @@ Content`);
       await listTasks({});
 
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('No tasks found'));
+    });
+
+    it('should reject invalid status value', async () => {
+      await expect(async () => {
+        await listTasks({ status: 'invalid' });
+      }).rejects.toThrow('Process exit');
+
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Invalid status: invalid'));
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Valid statuses:'));
+    });
+
+    it('should show message when no tasks match status filter', async () => {
+      mockFs.readdir.mockImplementation((dir) => {
+        const dirStr = String(dir);
+        if (dirStr.includes('open')) {
+          return Promise.resolve(['TASK-0001.md'] as any);
+        } else {
+          return Promise.resolve([] as any);
+        }
+      });
+      mockFs.readFile.mockResolvedValue(`---
+status: open
+title: Test Task
+---
+Content`);
+
+      await listTasks({ status: 'completed' });
+
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('No tasks found with status: completed'));
     });
   });
 });

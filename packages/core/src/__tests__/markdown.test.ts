@@ -1,6 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
-import * as os from 'os';
 import { parseTask, writeTask, getNextTaskNumber } from '../markdown';
 import { Task } from '../types';
 

@@ -3,7 +3,6 @@ import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { parseTask, writeTask } from '@sabin/core';
-import { Task } from '@sabin/core';
 
 type TaskStatus = 'open' | 'ready' | 'in_progress' | 'review' | 'completed';
 
