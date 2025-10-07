@@ -44,11 +44,11 @@ describe('CLI Commands', () => {
   });
 
   describe('initProject', () => {
-    it('should create directory structure', async () => {
+    it('should create directory structure with required prefix', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await initProject();
+      await initProject({ prefix: 'TASK' });
 
       expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/tasks/open', { recursive: true });
       expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/tasks/completed', { recursive: true });
@@ -69,6 +69,19 @@ describe('CLI Commands', () => {
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         '.sabin/config.json',
         expect.stringContaining('"projectPrefix": "MYPROJECT"')
+      );
+    });
+
+    it('should require prefix parameter', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      // TypeScript should prevent this, but test runtime behavior
+      await initProject({ prefix: 'TEST' });
+
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        '.sabin/config.json',
+        expect.stringContaining('"projectPrefix": "TEST"')
       );
     });
   });

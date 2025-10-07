@@ -16,7 +16,7 @@ program
 program
   .command('init')
   .description('Initialize Sabin in current directory')
-  .option('-p, --prefix <prefix>', 'Project prefix for task IDs (default: TASK)')
+  .requiredOption('-p, --prefix <prefix>', 'Project prefix for task IDs')
   .action(initProject);
 
 const task = program
