@@ -1,0 +1,452 @@
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  padding: 10px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background-color: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-widget-border);
+  z-index: 100;
+}
+
+.header-right {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.icon-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.todo-button {
+  background-color: #4A9EFF;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.todo-button:hover {
+  background-color: #3A8EEF;
+}
+
+.create-ticket-button {
+  background-color: #3C3C3C;
+  color: white;
+  border: 1px solid #555555;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.create-ticket-button:hover {
+  background-color: #4C4C4C;
+  border-color: #666666;
+}
+
+.btn-primary {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-size: 13px;
+}
+
+.btn-primary:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.tickets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.status-column {
+  min-width: 250px;
+}
+
+.status-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  margin-bottom: 10px;
+  text-transform: capitalize;
+}
+
+.status-header.clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+
+.status-header.clickable:hover {
+  opacity: 0.7;
+}
+
+.collapse-indicator {
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.status-header.completed-link a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+}
+
+.status-header.completed-link a:hover {
+  text-decoration: underline;
+}
+
+.tickets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tickets-list.collapsed {
+  display: none;
+}
+
+.ticket-card {
+  background-color: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 200ms, box-shadow 0.2s;
+  position: relative;
+  cursor: pointer;
+}
+
+.ticket-card:hover {
+  border-color: #52525b;
+}
+
+.ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ticket-id-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* OPEN button - Primary action */
+.open-task-button {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 200ms;
+  flex-shrink: 0;
+}
+
+.open-task-button:hover {
+  background-color: #1d4ed8;
+}
+
+/* Secondary actions container - hidden by default, revealed on card hover */
+.secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.ticket-card:hover .secondary-actions {
+  opacity: 1;
+}
+
+.ticket-number {
+  font-size: 14px;
+  font-weight: 400;
+  color: #71717a;
+  font-family: var(--vscode-editor-font-family);
+  flex-shrink: 0;
+}
+
+.plan-label {
+  background-color: transparent;
+  color: #c084fc;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 200ms;
+}
+
+.plan-label:hover {
+  color: #d8b4fe;
+}
+
+.plan-label svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.status-badge {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-badge:hover {
+  opacity: 0.9;
+}
+
+.status-open {
+  background-color: var(--vscode-debugConsole-infoForeground);
+  color: var(--vscode-editor-background);
+}
+
+.status-ready {
+  background-color: var(--vscode-debugIcon-startForeground);
+  color: var(--vscode-editor-background);
+}
+
+.status-in_progress {
+  background-color: var(--vscode-charts-purple);
+  color: var(--vscode-editor-background);
+}
+
+.status-review {
+  background-color: var(--vscode-debugConsole-warningForeground);
+  color: var(--vscode-editor-background);
+}
+
+.status-completed {
+  background-color: var(--vscode-debugIcon-stopForeground);
+  color: var(--vscode-editor-background);
+}
+
+.ticket-card h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.ticket-card h4:hover {
+  text-decoration: underline;
+}
+
+.ticket-description {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.plan-badge {
+  display: inline-block;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.plan-badge:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.planning-content {
+  padding: 20px;
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+}
+
+/* Status dropdown */
+.status-dropdown-container {
+  position: relative;
+}
+
+.status-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background-color: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  min-width: 100px;
+  overflow: hidden;
+}
+
+.status-dropdown.show {
+  display: block;
+}
+
+.status-option {
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.status-option:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.status-option .status-badge {
+  cursor: pointer;
+  pointer-events: none;
+}
+
+/* Action separator */
+.action-separator {
+  width: 1px;
+  height: 16px;
+  background-color: var(--vscode-widget-border);
+  display: inline-block;
+}
+
+/* Action icons */
+.action-icon {
+  background-color: transparent;
+  color: #a1a1aa;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 2px;
+  transition: color 200ms;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.copy-icon:hover {
+  color: #d4d4d8;
+}
+
+.delete-icon:hover {
+  color: #ef4444;
+}
+
+/* Completed view */
+.completed-view-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+}
+
+.completed-view-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.back-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.back-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.status-column.full-width {
+  grid-column: 1 / -1;
+}

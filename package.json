@@ -1,0 +1,22 @@
+{
+  "name": "sabin",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "lerna run build",
+    "test": "lerna run test",
+    "lint": "lerna run lint",
+    "typecheck": "lerna run typecheck",
+    "package:vscode": "cd packages/vscode-extension && npx @vscode/vsce package",
+    "package:cli": "cd packages/cli && npm pack",
+    "install:sabin": "node scripts/install.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "lerna": "^7.0.0",
+    "typescript": "^5.0.0"
+  }
+}

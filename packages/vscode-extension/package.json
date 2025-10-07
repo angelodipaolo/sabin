@@ -1,0 +1,95 @@
+{
+  "name": "sabin-vscode",
+  "displayName": "Sabin Workflow Manager",
+  "description": "Workflow management for agentic coding",
+  "version": "0.1.0",
+  "publisher": "angelodipaolo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/angelodipaolo/sabin.git",
+    "directory": "packages/vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sabin.newTask",
+        "title": "Sabin: New Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sabin.refreshTasks",
+        "title": "Sabin: Refresh Tasks",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sabin",
+          "title": "Sabin",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sabin": [
+        {
+          "type": "webview",
+          "id": "sabin.tasksView",
+          "name": ""
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "sabin.newTask",
+          "when": "view == sabin.tasksView",
+          "group": "navigation"
+        },
+        {
+          "command": "sabin.refreshTasks",
+          "when": "view == sabin.tasksView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "pretest": "npm run compile",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "npm run package",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sabin/core": "^0.1.0",
+    "@vscode/codicons": "^0.0.40",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.74.0",
+    "@vscode/test-electron": "^2.3.0",
+    "esbuild": "^0.25.10",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.4",
+    "typescript": "^5.0.0"
+  }
+}
