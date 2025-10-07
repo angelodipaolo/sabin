@@ -75,7 +75,7 @@ async function createNewTask(taskService: TaskService) {
       switch (message.command) {
         case 'createTask':
           try {
-            const filePath = await taskService.createTask(message.title, message.description, message.taskNumber);
+            const filePath = await taskService.createTask(message.title, undefined, message.taskNumber);
             const filename = path.basename(filePath);
 
             const document = await vscode.workspace.openTextDocument(filePath);
@@ -300,15 +300,6 @@ function getNewTaskHtml(webview: vscode.Webview, nextTaskNumber: string, project
                 autofocus
               />
             </div>
-            <div class="form-group">
-              <label class="form-label" for="description">
-                Description<span class="optional">(optional)</span>
-              </label>
-              <textarea
-                id="description"
-                placeholder="Add additional details..."
-              ></textarea>
-            </div>
           </form>
         </div>
         <div class="dialog-footer">
@@ -321,7 +312,6 @@ function getNewTaskHtml(webview: vscode.Webview, nextTaskNumber: string, project
         const vscode = acquireVsCodeApi();
         const taskNumberInput = document.getElementById('task-number');
         const titleInput = document.getElementById('title');
-        const descriptionInput = document.getElementById('description');
         const createBtn = document.getElementById('create-btn');
         const cancelBtn = document.getElementById('cancel-btn');
         const closeBtn = document.getElementById('close-btn');
@@ -335,13 +325,11 @@ function getNewTaskHtml(webview: vscode.Webview, nextTaskNumber: string, project
         createBtn.addEventListener('click', () => {
           const taskNumber = taskNumberInput.value.trim();
           const title = titleInput.value.trim();
-          const description = descriptionInput.value.trim();
 
           if (title) {
             vscode.postMessage({
               command: 'createTask',
               title: title,
-              description: description || undefined,
               taskNumber: taskNumber || undefined
             });
           }
