@@ -5,6 +5,7 @@ import { createTask } from './commands/create-task';
 import { updateStatus } from './commands/update-status';
 import { listTasks } from './commands/list-tasks';
 import { initProject } from './commands/init';
+import { installPrompts } from './commands/install-prompts';
 
 const program = new Command();
 
@@ -41,6 +42,16 @@ task
   .description('List all tasks')
   .option('-s, --status <status>', 'Filter by status (open/ready/in_progress/review/completed)')
   .action(listTasks);
+
+const prompts = program
+  .command('prompts')
+  .description('Manage AI agent prompts');
+
+prompts
+  .command('install')
+  .description('Install Sabin workflow prompts as slash commands for AI coding agents')
+  .option('-a, --agent <agent>', 'Target agent (default: claude)', 'claude')
+  .action(installPrompts);
 
 program.parse();
 

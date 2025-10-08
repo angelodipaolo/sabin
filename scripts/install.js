@@ -28,37 +28,12 @@ async function install() {
     console.error('Failed to install VS Code extension. Make sure VS Code CLI is available.');
   }
 
-  // Create .sabin directory structure
-  console.log('\nCreating .sabin directory structure...');
-  const sabinDirs = [
-    '.sabin/tickets/open',
-    '.sabin/tickets/resolved',
-    '.sabin/plans',
-    '.sabin/research'
-  ];
-
-  for (const dir of sabinDirs) {
-    const fullPath = path.join(process.cwd(), dir);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
-      console.log(`  Created: ${dir}`);
-    } else {
-      console.log(`  Already exists: ${dir}`);
-    }
-  }
-
-  // Create initial TODO.md if it doesn't exist
-  const todoPath = path.join(process.cwd(), '.sabin', 'TODO.md');
-  if (!fs.existsSync(todoPath)) {
-    fs.writeFileSync(todoPath, '# TODO\n\n');
-    console.log('  Created: .sabin/TODO.md');
-  }
-
   console.log('\nSabin installation complete!');
   console.log('\nNext steps:');
-  console.log('  1. Run "sabin --help" to see available commands');
-  console.log('  2. Open VS Code and look for the Sabin activity bar icon');
-  console.log('  3. Create your first ticket with "sabin create-ticket"');
+  console.log('  1. Run "sabin init --prefix YOUR_PREFIX" to initialize a project');
+  console.log('  2. (Optional) Run "sabin prompts install" to install Claude Code slash commands');
+  console.log('  3. Run "sabin --help" to see available commands');
+  console.log('  4. Open VS Code and look for the Sabin activity bar icon');
 }
 
 install().catch(error => {
