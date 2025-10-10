@@ -134,6 +134,43 @@ Now you can use the `sabin` command globally:
 sabin --help
 ```
 
+## Installation as Claude Code Plugin
+
+Sabin can be installed as a Claude Code plugin for seamless workflow integration.
+
+### Prerequisites
+
+1. Install the Sabin CLI:
+   ```bash
+   cd packages/cli
+   npm link
+   sabin --version  # Verify installation
+   ```
+
+2. Install Claude Code (if not already installed)
+
+### Plugin Installation
+
+From Claude Code:
+```bash
+# Add the Sabin marketplace (use absolute path to your Sabin repo)
+/plugin marketplace add /path/to/sabin
+
+# Install the plugin
+/plugin install sabin@sabin-local
+```
+
+### Available Plugin Commands
+
+- `/sabin-create` - Create a new task from requirements
+- `/sabin-plan` - Create an implementation plan for a task
+- `/sabin-implement` - Implement a task based on its plan
+- `/sabin-complete` - Complete and commit a task
+
+See `.claude-plugin/README.md` for detailed plugin documentation.
+
+**Note**: The plugin, CLI, and VS Code extension are separate installations that work together.
+
 ## Configuration
 
 Sabin uses a configuration file at `.sabin/config.json` to customize project settings.

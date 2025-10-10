@@ -1,0 +1,12 @@
+{
+  "name": "sabin-local",
+  "owner": {
+    "name": "Angelo"
+  },
+  "plugins": [
+    {
+      "name": "sabin",
+      "source": "./"
+    }
+  ]
+}

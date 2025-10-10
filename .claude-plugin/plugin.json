@@ -1,0 +1,11 @@
+{
+  "name": "sabin",
+  "version": "0.1.0",
+  "description": "File-based workflow management for agentic coding",
+  "author": {
+    "name": "Angelo"
+  },
+  "homepage": "https://github.com/yourusername/sabin",
+  "license": "MIT",
+  "keywords": ["workflow", "task-management", "agentic", "coding"]
+}
