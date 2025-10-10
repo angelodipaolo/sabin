@@ -56,6 +56,17 @@ export class TaskService {
       return { sabinDir: this.sabinDir, isLinked: this.isLinked };
     }
 
+    // Check if workspace root itself is a .sabin directory
+    // by looking for characteristic files/folders
+    const isSabinRoot = this.isSabinDirectory(this.workspaceRoot);
+
+    if (isSabinRoot) {
+      // Workspace root IS the .sabin directory
+      this.sabinDir = this.workspaceRoot;
+      this.isLinked = false;
+      return { sabinDir: this.sabinDir, isLinked: this.isLinked };
+    }
+
     const sabinPath = path.join(this.workspaceRoot, '.sabin');
 
     try {
@@ -93,9 +104,25 @@ export class TaskService {
   }
 
   /**
+   * Check if a directory is a .sabin directory by looking for characteristic structure
+   */
+  private isSabinDirectory(dirPath: string): boolean {
+    // Check for tasks/ directory or config.json file
+    const tasksDir = path.join(dirPath, 'tasks');
+    const configFile = path.join(dirPath, 'config.json');
+
+    return fs.existsSync(tasksDir) || fs.existsSync(configFile);
+  }
+
+  /**
    * Get working directory name
    */
   private getWorkingDirName(sabinDir: string): string {
+    // If workspace root IS the .sabin directory, no working directory needed
+    if (this.workspaceRoot === sabinDir) {
+      return '.';
+    }
+
     const sabinParent = path.dirname(sabinDir);
     const relativePath = path.relative(sabinParent, this.workspaceRoot);
     return relativePath === '' ? '.' : relativePath;

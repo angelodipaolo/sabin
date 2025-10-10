@@ -45,6 +45,12 @@ export class SabinFileWatcher implements vscode.Disposable {
   }
 
   private resolveSabinDir(workspaceRoot: string): string {
+    // Check if workspace root itself is a .sabin directory
+    // by looking for characteristic files/folders
+    if (this.isSabinDirectory(workspaceRoot)) {
+      return workspaceRoot;
+    }
+
     const sabinPath = path.join(workspaceRoot, '.sabin');
 
     try {
@@ -64,6 +70,17 @@ export class SabinFileWatcher implements vscode.Disposable {
 
     // Default to treating as directory
     return sabinPath;
+  }
+
+  /**
+   * Check if a directory is a .sabin directory by looking for characteristic structure
+   */
+  private isSabinDirectory(dirPath: string): boolean {
+    // Check for tasks/ directory or config.json file
+    const tasksDir = path.join(dirPath, 'tasks');
+    const configFile = path.join(dirPath, 'config.json');
+
+    return fs.existsSync(tasksDir) || fs.existsSync(configFile);
   }
 
   private handleChange() {
