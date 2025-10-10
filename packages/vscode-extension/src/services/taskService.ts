@@ -18,6 +18,7 @@ export interface Task {
   status: 'open' | 'ready' | 'in_progress' | 'review' | 'completed';
   title: string;
   plan?: string;
+  workingDir?: string;
   content: string;
   path: string;
   filename: string;
@@ -30,6 +31,8 @@ export class TaskService {
   private static instance: TaskService;
   private workspaceRoot: string;
   private config: SabinConfig | null = null;
+  private sabinDir: string | null = null;
+  private isLinked: boolean = false;
 
   private constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
@@ -46,6 +49,59 @@ export class TaskService {
   }
 
   /**
+   * Resolve .sabin directory (file or directory)
+   */
+  private async resolveSabinDir(): Promise<{ sabinDir: string; isLinked: boolean }> {
+    if (this.sabinDir) {
+      return { sabinDir: this.sabinDir, isLinked: this.isLinked };
+    }
+
+    const sabinPath = path.join(this.workspaceRoot, '.sabin');
+
+    try {
+      const stat = fs.statSync(sabinPath);
+
+      if (stat.isDirectory()) {
+        // Traditional .sabin directory
+        this.sabinDir = sabinPath;
+        this.isLinked = false;
+      } else if (stat.isFile()) {
+        // .sabin file contains link to shared directory
+        const content = fs.readFileSync(sabinPath, 'utf8');
+        const config = JSON.parse(content);
+
+        if (config.sabinDir) {
+          this.sabinDir = path.resolve(this.workspaceRoot, config.sabinDir);
+          this.isLinked = true;
+        } else {
+          throw new Error('.sabin file must contain "sabinDir" field');
+        }
+      } else {
+        // Fallback to traditional path
+        this.sabinDir = sabinPath;
+        this.isLinked = false;
+      }
+    } catch (error) {
+      console.error('Failed to resolve .sabin:', error);
+      // Fallback to traditional path
+      this.sabinDir = sabinPath;
+      this.isLinked = false;
+    }
+
+    // sabinDir is guaranteed to be set at this point
+    return { sabinDir: this.sabinDir!, isLinked: this.isLinked };
+  }
+
+  /**
+   * Get working directory name
+   */
+  private getWorkingDirName(sabinDir: string): string {
+    const sabinParent = path.dirname(sabinDir);
+    const relativePath = path.relative(sabinParent, this.workspaceRoot);
+    return relativePath === '' ? '.' : relativePath;
+  }
+
+  /**
    * Read the config file, returning default config if it doesn't exist
    */
   private async getConfig(): Promise<SabinConfig> {
@@ -53,7 +109,8 @@ export class TaskService {
       return this.config;
     }
 
-    const configPath = path.join(this.workspaceRoot, '.sabin', 'config.json');
+    const { sabinDir } = await this.resolveSabinDir();
+    const configPath = path.join(sabinDir, 'config.json');
     let loadedConfig: SabinConfig;
 
     try {
@@ -76,7 +133,8 @@ export class TaskService {
    * Get all tasks, optionally filtered by status
    */
   async getTasks(status?: string): Promise<Task[]> {
-    const tasksPath = path.join(this.workspaceRoot, '.sabin', 'tasks');
+    const { sabinDir } = await this.resolveSabinDir();
+    const tasksPath = path.join(sabinDir, 'tasks');
     const tasks: Task[] = [];
 
     for (const dir of ['open', 'completed']) {
@@ -113,6 +171,7 @@ export class TaskService {
       status: data.status || 'open',
       title: data.title || path.basename(filePath, '.md'),
       plan: data.plan,
+      workingDir: data.workingDir,
       content: body,
       path: filePath,
       filename: path.basename(filePath)
@@ -123,9 +182,11 @@ export class TaskService {
    * Update a task's status and move file if necessary
    */
   async updateTaskStatus(taskId: string, newStatus: string): Promise<void> {
+    const { sabinDir, isLinked } = await this.resolveSabinDir();
+
     let filePath: string | undefined;
     for (const dir of ['open', 'completed']) {
-      const testPath = path.join(this.workspaceRoot, '.sabin', 'tasks', dir, `${taskId}.md`);
+      const testPath = path.join(sabinDir, 'tasks', dir, `${taskId}.md`);
       if (fs.existsSync(testPath)) {
         filePath = testPath;
         break;
@@ -136,32 +197,53 @@ export class TaskService {
       throw new Error(`Task ${taskId} not found`);
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
-    const updatedContent = content.replace(
+    let content = fs.readFileSync(filePath, 'utf8');
+
+    // Update status
+    content = content.replace(
       /^status:\s*\w+$/m,
       `status: ${newStatus}`
     );
 
+    // Add/update workingDir when moving to in_progress
+    if (newStatus === 'in_progress' && isLinked) {
+      const workingDir = this.getWorkingDirName(sabinDir);
+
+      if (content.match(/^workingDir:/m)) {
+        // Update existing
+        content = content.replace(
+          /^workingDir:.*$/m,
+          `workingDir: ${workingDir}`
+        );
+      } else {
+        // Add after status line
+        content = content.replace(
+          /^(status:\s*\w+)$/m,
+          `$1\nworkingDir: ${workingDir}`
+        );
+      }
+    }
+
     // Write updated content first
-    fs.writeFileSync(filePath, updatedContent);
+    fs.writeFileSync(filePath, content);
 
     // Move file if needed (with delay to ensure write completes)
     if (newStatus === 'completed' && !filePath.includes('/completed/')) {
-      await this.moveTaskToCompleted(filePath);
+      await this.moveTaskToCompleted(filePath, sabinDir);
     } else if (newStatus !== 'completed' && filePath.includes('/completed/')) {
-      await this.moveTaskToOpen(filePath);
+      await this.moveTaskToOpen(filePath, sabinDir);
     }
   }
 
   /**
    * Move a task file to the completed directory
    */
-  private async moveTaskToCompleted(filePath: string): Promise<void> {
+  private async moveTaskToCompleted(filePath: string, sabinDir: string): Promise<void> {
     // Small delay to ensure file write completes
     await new Promise(resolve => setTimeout(resolve, 100));
 
     const filename = path.basename(filePath);
-    const newPath = path.join(this.workspaceRoot, '.sabin', 'tasks', 'completed', filename);
+    const newPath = path.join(sabinDir, 'tasks', 'completed', filename);
 
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(newPath)));
     await vscode.workspace.fs.rename(vscode.Uri.file(filePath), vscode.Uri.file(newPath));
@@ -170,12 +252,12 @@ export class TaskService {
   /**
    * Move a task file to the open directory
    */
-  private async moveTaskToOpen(filePath: string): Promise<void> {
+  private async moveTaskToOpen(filePath: string, sabinDir: string): Promise<void> {
     // Small delay to ensure file write completes
     await new Promise(resolve => setTimeout(resolve, 100));
 
     const filename = path.basename(filePath);
-    const newPath = path.join(this.workspaceRoot, '.sabin', 'tasks', 'open', filename);
+    const newPath = path.join(sabinDir, 'tasks', 'open', filename);
 
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(newPath)));
     await vscode.workspace.fs.rename(vscode.Uri.file(filePath), vscode.Uri.file(newPath));
@@ -194,7 +276,8 @@ export class TaskService {
    */
   async getNextTaskNumber(): Promise<string> {
     const config = await this.getConfig();
-    const tasksDir = path.join(this.workspaceRoot, '.sabin', 'tasks');
+    const { sabinDir } = await this.resolveSabinDir();
+    const tasksDir = path.join(sabinDir, 'tasks');
     const fsVscode = vscode.workspace.fs;
 
     let maxNumber = 0;
@@ -228,7 +311,8 @@ export class TaskService {
    */
   async createTask(title: string, description?: string, taskNumber?: string): Promise<string> {
     const config = await this.getConfig();
-    const tasksDir = path.join(this.workspaceRoot, '.sabin', 'tasks');
+    const { sabinDir, isLinked } = await this.resolveSabinDir();
+    const tasksDir = path.join(sabinDir, 'tasks');
     const fsVscode = vscode.workspace.fs;
 
     await fsVscode.createDirectory(vscode.Uri.file(path.join(tasksDir, 'open')));
@@ -277,11 +361,21 @@ export class TaskService {
       return value;
     };
 
-    const content = `---
+    let frontmatter = `---
 status: open
-title: ${quoteYaml(title)}
----
+title: ${quoteYaml(title)}`;
 
+    // Add working directory for tasks in linked setup
+    if (isLinked) {
+      const workingDir = this.getWorkingDirName(sabinDir);
+      if (workingDir !== '.') {
+        frontmatter += `\nworkingDir: ${workingDir}`;
+      }
+    }
+
+    frontmatter += '\n---\n';
+
+    const content = `${frontmatter}
 ${description || ''}
 `;
 

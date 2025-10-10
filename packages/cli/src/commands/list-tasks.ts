@@ -1,8 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
-import { parseTask, readConfig } from '@sabin/core';
-import { Task } from '@sabin/core';
+import {
+  parseTask,
+  readConfig,
+  resolveSabinDir,
+  Task
+} from '@sabin/core';
 
 interface ListTasksOptions {
   status?: string;
@@ -19,7 +23,8 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
       process.exit(1);
     }
 
-    const sabinDir = '.sabin';
+    // Resolve .sabin directory
+    const { sabinDir } = await resolveSabinDir();
     const tasksDir = path.join(sabinDir, 'tasks');
     const config = await readConfig(sabinDir);
     const tasks: Task[] = [];
@@ -84,6 +89,10 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
 
       if (task.plan) {
         console.log(`  ${chalk.gray('Plan:')} ${chalk.cyan(task.plan)}`);
+      }
+
+      if (task.workingDir) {
+        console.log(`  ${chalk.gray('Working Dir:')} ${chalk.cyan(task.workingDir)}`);
       }
 
       console.log(chalk.gray('─'.repeat(60)));

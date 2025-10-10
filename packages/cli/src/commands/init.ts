@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { writeConfig, getDefaultConfig } from '@sabin/core';
+import { writeConfig, getDefaultConfig, checkSabinType } from '@sabin/core';
 
 interface InitOptions {
   prefix: string;
@@ -12,7 +12,19 @@ export async function initProject(options: InitOptions): Promise<void> {
   const spinner = ora('Initializing Sabin project structure...').start();
 
   try {
-    const sabinDir = '.sabin';
+    const projectRoot = process.cwd();
+    const sabinType = await checkSabinType(projectRoot);
+
+    if (sabinType !== 'none') {
+      throw new Error(
+        `.sabin already exists in this directory.\n` +
+        `To link to a shared .sabin, remove the existing one and run: sabin link <path>`
+      );
+    }
+
+    const sabinDir = path.join(projectRoot, '.sabin');
+
+    // Create directory structure
     const dirs = [
       path.join(sabinDir, 'tasks', 'open'),
       path.join(sabinDir, 'tasks', 'completed'),
@@ -39,9 +51,10 @@ export async function initProject(options: InitOptions): Promise<void> {
     console.log(chalk.gray('  ├── plans/'));
     console.log(chalk.gray('  └── research/'));
     console.log(chalk.cyan(`\nProject prefix set to: ${options.prefix}`));
-  } catch (error) {
+    console.log(chalk.gray(`Location: ${sabinDir}`));
+  } catch (error: any) {
     spinner.fail(chalk.red('Failed to initialize Sabin project'));
-    console.error(error);
+    console.error(chalk.red(error.message));
     process.exit(1);
   }
 }

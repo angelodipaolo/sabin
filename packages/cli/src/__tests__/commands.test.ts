@@ -27,6 +27,20 @@ jest.mock('@inquirer/prompts', () => ({
   input: jest.fn().mockResolvedValue('')
 }));
 
+// Mock the new core functions
+jest.mock('@sabin/core', () => {
+  const actualCore = jest.requireActual('@sabin/core');
+  return {
+    ...actualCore,
+    resolveSabinDir: jest.fn().mockResolvedValue({
+      sabinDir: '.sabin',
+      isLinked: false,
+      projectRoot: process.cwd()
+    }),
+    checkSabinType: jest.fn().mockResolvedValue('none')
+  };
+});
+
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe('CLI Commands', () => {
@@ -47,15 +61,16 @@ describe('CLI Commands', () => {
     it('should create directory structure with required prefix', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
 
       await initProject({ prefix: 'TASK' });
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/tasks/open', { recursive: true });
-      expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/tasks/completed', { recursive: true });
-      expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/plans', { recursive: true });
-      expect(mockFs.mkdir).toHaveBeenCalledWith('.sabin/research', { recursive: true });
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/tasks/open'), { recursive: true });
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/tasks/completed'), { recursive: true });
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/plans'), { recursive: true });
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/research'), { recursive: true });
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '.sabin/config.json',
+        expect.stringContaining('.sabin/config.json'),
         expect.stringContaining('"projectPrefix": "TASK"')
       );
     });
@@ -63,11 +78,12 @@ describe('CLI Commands', () => {
     it('should create config with custom prefix', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
 
       await initProject({ prefix: 'MYPROJECT' });
 
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '.sabin/config.json',
+        expect.stringContaining('.sabin/config.json'),
         expect.stringContaining('"projectPrefix": "MYPROJECT"')
       );
     });
@@ -75,12 +91,13 @@ describe('CLI Commands', () => {
     it('should require prefix parameter', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
 
       // TypeScript should prevent this, but test runtime behavior
       await initProject({ prefix: 'TEST' });
 
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '.sabin/config.json',
+        expect.stringContaining('.sabin/config.json'),
         expect.stringContaining('"projectPrefix": "TEST"')
       );
     });

@@ -104,7 +104,7 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
   private async createTask(payload: any) {
     console.log('[Sabin Debug] webviewProvider.createTask called with payload:', payload);
     try {
-      const filePath = await this.taskService.createTask(payload.title, undefined, payload.taskNumber);
+      const filePath = await this.taskService.createTask(payload.title, payload.description, payload.taskNumber);
       const filename = path.basename(filePath);
       vscode.window.showInformationMessage(`Created task: ${filename}`);
 

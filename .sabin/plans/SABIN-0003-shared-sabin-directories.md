@@ -279,15 +279,15 @@ export * from './workingDir';
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Unit tests pass for `resolveSabinDir()`: `npm test -w @sabin/core -- sabinResolver.test.ts`
+- [x] Unit tests pass for `resolveSabinDir()`: `npm test -w @sabin/core -- sabinResolver.test.ts`
   - Test resolving directory (traditional .sabin/)
   - Test resolving file (linked .sabin)
   - Test error when .sabin doesn't exist
   - Test error when .sabin file has invalid JSON
-- [ ] Unit tests pass for `getWorkingDirName()`: Various path combinations
-- [ ] Type checking passes: `npm run typecheck`
-- [ ] Linting passes: `npm run lint`
-- [ ] All core package tests pass: `npm test -w @sabin/core`
+- [x] Unit tests pass for `getWorkingDirName()`: Various path combinations
+- [x] Type checking passes: `npm run typecheck`
+- [x] Linting passes: `npm run lint`
+- [x] All core package tests pass: `npm test -w @sabin/core`
 
 #### Manual Verification:
 - [ ] Create test directory with .sabin as file and verify resolution
@@ -640,10 +640,10 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] All CLI tests pass: `npm test -w @sabin/cli`
-- [ ] Type checking passes: `npm run typecheck`
-- [ ] Linting passes: `npm run lint`
-- [ ] Build succeeds: `npm run build`
+- [x] All CLI tests pass: `npm test -w @sabin/cli`
+- [x] Type checking passes: `npm run typecheck`
+- [x] Linting passes: `npm run lint`
+- [x] Build succeeds: `npm run build`
 
 #### Manual Verification:
 - [ ] `sabin init --prefix TEST` creates .sabin/ directory
@@ -869,13 +869,13 @@ export class SabinFileWatcher implements vscode.Disposable {
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Extension builds successfully: `cd packages/vscode-extension && npm run package`
-- [ ] Type checking passes: `npm run typecheck`
-- [ ] Linting passes: `npm run lint`
+- [x] Extension builds successfully: `cd packages/vscode-extension && npm run package`
+- [x] Type checking passes: `npm run typecheck`
+- [x] Linting passes: `npm run lint`
 - [ ] All extension tests pass: `npm test -w sabin-vscode`
 
 #### Manual Verification:
-- [ ] Install VSIX: `cd packages/vscode-extension && npx @vscode/vsce package && code --install-extension sabin-vscode-0.1.0.vsix`
+- [x] Install VSIX: `cd packages/vscode-extension && npx @vscode/vsce package && code --install-extension sabin-vscode-0.1.0.vsix`
 - [ ] Open workspace with .sabin file (linked)
 - [ ] Extension shows tasks from shared directory
 - [ ] Creating task via extension adds workingDir field

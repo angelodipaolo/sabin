@@ -2,7 +2,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { parseTask, writeTask } from '@sabin/core';
+import {
+  parseTask,
+  writeTask,
+  resolveSabinDir,
+  getWorkingDirName
+} from '@sabin/core';
 
 type TaskStatus = 'open' | 'ready' | 'in_progress' | 'review' | 'completed';
 
@@ -16,7 +21,8 @@ export async function updateStatus(taskId: string, newStatus: string): Promise<v
       throw new Error(`Invalid status: ${newStatus}. Must be one of: ${validStatuses.join(', ')}`);
     }
 
-    const sabinDir = '.sabin';
+    // Resolve .sabin directory
+    const { sabinDir, isLinked, projectRoot } = await resolveSabinDir();
     const tasksDir = path.join(sabinDir, 'tasks');
 
     // Find task file
@@ -63,6 +69,11 @@ export async function updateStatus(taskId: string, newStatus: string): Promise<v
     const task = await parseTask(taskPath);
     task.status = newStatus as TaskStatus;
 
+    // Update working directory when moving to in_progress
+    if (newStatus === 'in_progress' && isLinked) {
+      task.workingDir = getWorkingDirName(sabinDir, projectRoot);
+    }
+
     // Determine if we need to move the file
     const shouldBeInCompleted = newStatus === 'completed';
     const isInCompleted = currentDir === 'completed';
@@ -91,6 +102,10 @@ export async function updateStatus(taskId: string, newStatus: string): Promise<v
       // Just update status in place
       await writeTask(task);
       spinner.succeed(chalk.green(`Updated task ${taskId} status to ${newStatus}`));
+    }
+
+    if (task.workingDir) {
+      console.log(chalk.gray(`Working directory: ${task.workingDir}`));
     }
   } catch (error: any) {
     spinner.fail(chalk.red(`Failed to update task status`));

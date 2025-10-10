@@ -5,6 +5,7 @@ import { createTask } from './commands/create-task';
 import { updateStatus } from './commands/update-status';
 import { listTasks } from './commands/list-tasks';
 import { initProject } from './commands/init';
+import { linkToSharedSabin } from './commands/link';
 import { installPrompts } from './commands/install-prompts';
 
 const program = new Command();
@@ -19,6 +20,12 @@ program
   .description('Initialize Sabin in current directory')
   .requiredOption('-p, --prefix <prefix>', 'Project prefix for task IDs')
   .action(initProject);
+
+program
+  .command('link')
+  .description('Link to a shared .sabin directory')
+  .argument('<path>', 'Path to shared .sabin directory')
+  .action(linkToSharedSabin);
 
 const task = program
   .command('task')

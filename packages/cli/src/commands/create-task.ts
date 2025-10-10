@@ -3,8 +3,14 @@ import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { input } from '@inquirer/prompts';
-import { getNextTaskNumber, writeTask, readConfig } from '@sabin/core';
-import { Task } from '@sabin/core';
+import {
+  getNextTaskNumber,
+  writeTask,
+  readConfig,
+  resolveSabinDir,
+  getWorkingDirName,
+  Task
+} from '@sabin/core';
 
 interface CreateTaskOptions {
   title?: string;
@@ -16,14 +22,15 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
   let spinner: ReturnType<typeof ora> | undefined;
 
   try {
-    const sabinDir = '.sabin';
+    // Resolve .sabin directory (file or directory)
+    const { sabinDir, isLinked, projectRoot } = await resolveSabinDir();
     const tasksDir = path.join(sabinDir, 'tasks');
     const openDir = path.join(tasksDir, 'open');
 
     // Ensure directory exists
     await fs.mkdir(openDir, { recursive: true });
 
-    // Read config
+    // Read config from resolved .sabin directory
     const config = await readConfig(sabinDir);
 
     // Prompt for missing required fields
@@ -93,11 +100,19 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
       path: filePath
     };
 
+    // Add working directory if using linked setup
+    if (isLinked) {
+      task.workingDir = getWorkingDirName(sabinDir, projectRoot);
+    }
+
     // Write task file
     await writeTask(task);
 
     spinner.succeed(chalk.green(`Created task: ${filename}`));
     console.log(chalk.gray(`Path: ${filePath}`));
+    if (task.workingDir) {
+      console.log(chalk.gray(`Working directory: ${task.workingDir}`));
+    }
   } catch (error) {
     // Re-throw process exit errors (for testing)
     if (error instanceof Error && error.message === 'Process exit') {

@@ -1,5 +1,5 @@
 ---
-status: ready
+status: completed
 title: share sabin across repos and work trees
 plan: .sabin/plans/SABIN-0003-shared-sabin-directories.md
 ---

@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class SabinFileWatcher implements vscode.Disposable {
   private fileWatcher: vscode.FileSystemWatcher;
@@ -14,10 +16,13 @@ export class SabinFileWatcher implements vscode.Disposable {
       throw new Error('No workspace folder found');
     }
 
+    // Resolve .sabin location
+    const sabinDir = this.resolveSabinDir(workspaceRoot.uri.fsPath);
+
     // Watch for file changes
     const filePattern = new vscode.RelativePattern(
-      workspaceRoot,
-      '.sabin/**/*.md'
+      sabinDir,
+      '**/*.md'
     );
 
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(filePattern);
@@ -28,8 +33,8 @@ export class SabinFileWatcher implements vscode.Disposable {
 
     // Watch for directory changes (to catch moves between directories)
     const dirPattern = new vscode.RelativePattern(
-      workspaceRoot,
-      '.sabin/tasks/**'
+      sabinDir,
+      'tasks/**'
     );
 
     this.directoryWatcher = vscode.workspace.createFileSystemWatcher(dirPattern);
@@ -37,6 +42,28 @@ export class SabinFileWatcher implements vscode.Disposable {
     // When files are created/deleted in directories, it indicates a move
     this.directoryWatcher.onDidCreate(() => this.handleRename());
     this.directoryWatcher.onDidDelete(() => this.handleRename());
+  }
+
+  private resolveSabinDir(workspaceRoot: string): string {
+    const sabinPath = path.join(workspaceRoot, '.sabin');
+
+    try {
+      const stat = fs.statSync(sabinPath);
+
+      if (stat.isFile()) {
+        // Read link file
+        const content = fs.readFileSync(sabinPath, 'utf8');
+        const config = JSON.parse(content);
+        if (config.sabinDir) {
+          return path.resolve(workspaceRoot, config.sabinDir);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to read .sabin:', error);
+    }
+
+    // Default to treating as directory
+    return sabinPath;
   }
 
   private handleChange() {
