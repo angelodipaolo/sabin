@@ -12,7 +12,8 @@
     "typecheck": "lerna run typecheck",
     "package:vscode": "cd packages/vscode-extension && npx @vscode/vsce package",
     "package:cli": "cd packages/cli && npm pack",
-    "install:sabin": "node scripts/install.js"
+    "install:sabin": "node scripts/install.js",
+    "install:codex-skill": ".codex-skill/install.sh"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
