@@ -46,5 +46,5 @@ A good plan includes:
 echo "# Implementation Plan for Feature X" > .sabin/plans/feature-x-plan.md
 
 # Link plan to task
-sabin update-status TASK-0001 ready
+sabin task update TASK-0001 ready
 ```
