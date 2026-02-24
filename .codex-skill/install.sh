@@ -76,8 +76,19 @@ CONTENT=$(awk '
 ' "$SKILL_FILE")
 
 HAD_EXISTING=0
-if [ -f "$AGENTS_FILE" ] && grep -Fq "$START_MARKER" "$AGENTS_FILE" 2>/dev/null; then
-  HAD_EXISTING=1
+if [ -f "$AGENTS_FILE" ]; then
+  HAS_START=$(grep -Fc "$START_MARKER" "$AGENTS_FILE" 2>/dev/null || true)
+  HAS_END=$(grep -Fc "$END_MARKER" "$AGENTS_FILE" 2>/dev/null || true)
+
+  if [ "$HAS_START" -gt 0 ] && [ "$HAS_END" -eq 0 ]; then
+    echo "Error: found '$START_MARKER' without matching '$END_MARKER' in $AGENTS_FILE"
+    echo "Fix the file manually or remove the stale marker before re-running."
+    exit 1
+  fi
+
+  if [ "$HAS_START" -gt 0 ] && [ "$HAS_END" -gt 0 ]; then
+    HAD_EXISTING=1
+  fi
 fi
 
 TMP_FILE="$(mktemp)"
