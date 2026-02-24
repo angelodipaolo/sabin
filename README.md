@@ -171,6 +171,27 @@ See `.claude-plugin/README.md` for detailed plugin documentation.
 
 **Note**: The plugin, CLI, and VS Code extension are separate installations that work together.
 
+## Claude Plugin vs Codex Skill
+
+Sabin supports two agent integrations:
+
+- Claude Code plugin (`.claude-plugin/`): installs slash commands (`/sabin-create`, `/sabin-plan`, `/sabin-implement`, `/sabin-complete`) for Claude Code.
+- Codex skill (`.codex-skill/`): installs Sabin workflow instructions into a project's `AGENTS.md` so Codex/OpenClaw follows the same task lifecycle.
+
+Both depend on the Sabin CLI. Choose the integration that matches your agent environment, or install both if you use both tools.
+
+### Install Codex Skill
+
+```bash
+# Install into current project
+/path/to/sabin/.codex-skill/install.sh
+
+# Install into a specific project
+/path/to/sabin/.codex-skill/install.sh ~/projects/my-app
+```
+
+See `.codex-skill/README.md` for full Codex skill install/uninstall details.
+
 ## Configuration
 
 Sabin uses a configuration file at `.sabin/config.json` to customize project settings.

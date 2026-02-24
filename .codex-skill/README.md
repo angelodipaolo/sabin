@@ -31,9 +31,18 @@ From the sabin repo, install the skill into any project:
 
 # Install to a specific project
 /path/to/sabin/.codex-skill/install.sh ~/projects/my-app
+
+# If sabin CLI is not installed yet, bypass preflight check
+/path/to/sabin/.codex-skill/install.sh --force ~/projects/my-app
 ```
 
-This appends the Sabin workflow instructions to your project's `AGENTS.md` (creates it if needed).
+By default, install fails fast if `sabin` CLI is missing from PATH. Use `--force` to bypass this check.
+
+Install uses marker-bounded blocks in `AGENTS.md`:
+- `<!-- SABIN_SKILL_START -->`
+- `<!-- SABIN_SKILL_END -->`
+
+Re-running install performs an in-place upgrade by replacing the existing marked block with fresh content.
 
 ## Uninstall
 
@@ -47,7 +56,7 @@ This appends the Sabin workflow instructions to your project's `AGENTS.md` (crea
 
 ## What Gets Added
 
-The install script appends a `# Sabin Workflow Skill` section to `AGENTS.md` containing:
+The install script adds a marker-bounded `# Sabin Workflow Skill` section to `AGENTS.md` containing:
 
 - Task lifecycle documentation
 - CLI command reference
