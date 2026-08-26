@@ -171,6 +171,30 @@ See `.claude-plugin/README.md` for detailed plugin documentation.
 
 **Note**: The plugin, CLI, and VS Code extension are separate installations that work together.
 
+## Installation as Codex Skill
+
+Sabin can be installed as a Codex skill for use across any project (global install).
+
+### Prerequisites
+
+- Codex installed and configured
+
+### Install via Skill Installer
+
+Use the Codex skill installer script to install from GitHub into `~/.codex/skills`:
+
+```bash
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo yourusername/sabin \
+  --path .codex/skills/sabin
+```
+
+Then restart Codex to pick up the new skill.
+
+### Global Install (All Projects)
+
+Codex loads global skills from `~/.codex/skills`. After installing, the Sabin skill is available in any project without adding repo-scoped files.
+
 ## Configuration
 
 Sabin uses a configuration file at `.sabin/config.json` to customize project settings.
