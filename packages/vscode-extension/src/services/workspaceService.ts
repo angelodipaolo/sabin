@@ -10,6 +10,8 @@ import {
   workspacePaths,
   slugFromTitle,
   findWorkspaceDir,
+  codeWorkspacePath,
+  writeCodeWorkspace,
   DEFAULT_NOTES_DIR,
   SabinConfig
 } from '@sabin/core';
@@ -135,6 +137,34 @@ export class WorkspaceService {
     }
 
     return title ? slugFromTitle(title, config) : null;
+  }
+
+  /**
+   * The project's .code-workspace file, generating it if absent.
+   *
+   * When the window is rooted on .sabin itself there is no main clone to name
+   * it after, so fall back to whichever workspace file is already there.
+   */
+  public async getCodeWorkspacePath(): Promise<string | null> {
+    const sabinDir = await this.getSabinDir();
+    const mainRoot = await this.getMainRoot();
+
+    if (mainRoot) {
+      const target = codeWorkspacePath(sabinDir, mainRoot);
+      try {
+        await fs.access(target);
+      } catch {
+        await writeCodeWorkspace(sabinDir, mainRoot);
+      }
+      return target;
+    }
+
+    try {
+      const existing = (await fs.readdir(sabinDir)).find(file => file.endsWith('.code-workspace'));
+      return existing ? path.join(sabinDir, existing) : null;
+    } catch {
+      return null;
+    }
   }
 
   public async getSabinDir(): Promise<string> {

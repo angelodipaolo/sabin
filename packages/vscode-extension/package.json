@@ -50,6 +50,11 @@
         "command": "sabin.unpinTask",
         "title": "Sabin: Follow Current Branch",
         "icon": "$(pinned)"
+      },
+      {
+        "command": "sabin.openProjectWorkspace",
+        "title": "Sabin: Reopen as Sabin Workspace",
+        "icon": "$(window)"
       }
     ],
     "viewsContainers": {

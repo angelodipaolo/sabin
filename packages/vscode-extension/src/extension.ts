@@ -77,6 +77,10 @@ function registerWorkspaceCommands(
   service: WorkspaceService,
   tree: WorkspaceTreeProvider
 ) {
+  // Focusing still works without folder swapping, so nag once per session
+  // rather than on every click
+  let warnedAboutPlainWindow = false;
+
   context.subscriptions.push(
     vscode.commands.registerCommand('sabin.focusTask', async (ticket?: string) => {
       const target = ticket ?? await pickTicket(service);
@@ -87,12 +91,22 @@ function registerWorkspaceCommands(
       const workspace = tree.find(target);
       if (!workspace) return;
 
-      const result = focusFolders(workspace);
-      if (result === 'unsupported') {
-        vscode.window.showInformationMessage(
-          'Open the project\'s .code-workspace file to let Sabin swap folders when you switch tasks.'
-        );
+      if (focusFolders(workspace) === 'unsupported' && !warnedAboutPlainWindow) {
+        warnedAboutPlainWindow = true;
+        void offerProjectWorkspace(service);
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.openProjectWorkspace', async () => {
+      const target = await service.getCodeWorkspacePath();
+      if (!target) {
+        vscode.window.showWarningMessage('No Sabin workspace file found. Run `sabin link` in the project.');
+        return;
+      }
+
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target));
     })
   );
 
@@ -137,6 +151,23 @@ function registerWorkspaceCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('sabin.unpinTask', () => tree.unpin())
   );
+}
+
+/**
+ * Explain why folders did not swap, and offer the one-click fix
+ */
+async function offerProjectWorkspace(service: WorkspaceService): Promise<void> {
+  const target = await service.getCodeWorkspacePath();
+
+  const message = target
+    ? 'Task focused. To also swap the Explorer to each task\'s code and notes, reopen this project as a Sabin workspace.'
+    : 'Task focused. Folder swapping needs a Sabin workspace file - run `sabin link` in the project to create one.';
+
+  const action = target ? await vscode.window.showInformationMessage(message, 'Reopen') : undefined;
+
+  if (action === 'Reopen' && target) {
+    await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target));
+  }
 }
 
 async function pickTicket(service: WorkspaceService): Promise<string | undefined> {
