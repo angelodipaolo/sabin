@@ -11,7 +11,11 @@ export async function parseTask(filePath: string): Promise<Task> {
   return {
     status: data.status || 'open',
     title: data.title,
+    slug: data.slug,
     plan: data.plan,
+    workingDir: data.workingDir,
+    branch: data.branch,
+    worktree: data.worktree,
     content: body,
     path: filePath
   };

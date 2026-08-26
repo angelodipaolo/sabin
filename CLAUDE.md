@@ -82,7 +82,7 @@ The system uses a file-based approach with this directory structure:
 ### Task Structure
 
 Tasks are markdown files with YAML frontmatter:
-- **Frontmatter fields**: `status` (open/ready/review/completed), `title`, `description` (optional), `plan` (optional path to plan file)
+- **Frontmatter fields**: `status` (open/ready/in_progress/review/completed), `title`, `slug` (optional descriptive suffix), `plan` (optional path to plan file), `branch`, `worktree`, `workingDir`
 - **Statuses**:
   - `open`: Initial requirements, not ready for implementation
   - `ready`: Has enough detail/plan for implementation
@@ -90,10 +90,49 @@ Tasks are markdown files with YAML frontmatter:
   - `completed`: Approved and committed (moves to `tasks/completed/`)
 - **File naming**: `TASK-####.md` with zero-padded 4-digit numbers
 
+### Workspaces
+
+Every ticket has a workspace, with all paths derived from the ticket ID (nothing is tracked or allocated):
+
+```
+JIRA-12345 + "update-telemetry"
+     |
+     +-- branch      angelo/JIRA-12345-update-telemetry
+     +-- worktree    <repo>-worktrees/JIRA-12345-update-telemetry
+     +-- notes       .sabin/notes/JIRA-12345-update-telemetry/     (agent: read + write)
+     +-- prompt      .sabin/prompts/JIRA-12345-update-telemetry.md (agent: denied)
+     +-- task        .sabin/tasks/open/JIRA-12345.md               (bare ID - the stable key)
+```
+
+The descriptive suffix (`slug`) is **derived from the task title by default**, so `sabin start SABIN-0004`
+alone produces `SABIN-0004-task-workspaces-worktree-notes`. One slug drives the branch, worktree, notes
+and prompt names alike, so they always match. Derivation drops filler words ("for", "the", "per"),
+truncates on a word boundary at 32 characters, and never ends on a filler word. Configure it under
+`slug` in `config.json`, or switch it off with `"slug": { "from": "none" }`.
+
+Resolution order for the suffix: an explicit `--slug`/argument suffix, then the recorded `slug`, then an
+existing directory on disk, then the title. The recorded value is the single source of truth once set.
+Task **filenames** stay the bare ticket ID so lookups never depend on the suffix; every other path
+carries it. `sabin start JIRA-12345-update-telemetry` sets the suffix and creates the task if it does
+not exist yet. Once recorded, the suffix is fixed - passing a different one warns and keeps the
+original rather than orphaning directories.
+
+The prompt file is a human scratchpad for drafting prompts. It lives outside the repo tree so the agent
+never sees it. Notes are where the agent reads context and writes plans and docs.
+
+**The CLI owns what the filesystem cannot know** - branch inference, ID allocation, status transitions
+(status lives in *both* frontmatter and the containing directory, so direct edits desynchronise them),
+and worktree lifecycle. File tools own bytes. There are deliberately no note CRUD commands: once
+`sabin where --notes` gives the path, an ordinary write is strictly more capable.
+
 ### Core Package (@sabin/core)
 
 Located in `packages/core/src/`:
-- `types.ts`: Defines `Task` and `TodoItem` interfaces
+- `types.ts`: Defines `Task`, `SabinConfig` and related interfaces
+- `git.ts`: Branch, worktree and repo-root helpers (`currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree`)
+- `workspace.ts`: `ticketFromBranch()`, `parseTicketArg()`, `workspaceName()`, `workspacePaths()`, `resolveWorkspace()`, `findTaskFile()`
+- `lock.ts`: `withLock()` - mkdir-based, scoped to ID allocation and status mutations only
+- `sabinResolver.ts`: Resolves `.sabin` (directory or link file), walking up and falling back to the main worktree root
 - `markdown.ts`: Utility functions for parsing/writing tasks and TODO files
   - `parseTask()`: Read task from file
   - `writeTask()`: Write task to file
@@ -114,16 +153,44 @@ Located in `packages/cli/src/`:
   - `list-tasks.ts`: List tasks with optional status filter
 
 **CLI Commands:**
-- `sabin init` - Initialize Sabin in current directory
-  - `-p, --prefix <prefix>` - Project prefix for task IDs (default: TASK)
+- `sabin init` - Set up Sabin for a project. Run it from inside the repo.
+  - Interactively asks whether `.sabin` lives outside the repo (shared across worktrees) or inside it
+  - `-s, --shared <path>` - Create or reuse a shared `.sabin` there and link to it
+  - `--local` - Keep `.sabin` inside the repo, skipping the prompt (the non-interactive default)
+  - `-p, --prefix <prefix>` - Task ID prefix (defaults to the repo directory name)
+  - `-b, --branch-prefix <prefix>` - Personal branch prefix (defaults to your git `user.name`)
+  - `-w, --worktrees <path>` - Worktree root, relative to the repo
+  - `--no-exclude` - Skip adding `.sabin` to `.git/info/exclude`
+  - Pointing a second repo at an existing shared `.sabin` just links it, leaving the config alone
+- `sabin link <path>` - Link this project to a shared `.sabin` directory (`init --shared` does this for you)
+- `sabin start <ticket>` - Create the worktree, branch, notes directory and prompt file. Idempotent.
+  - Accepts a descriptive suffix: `sabin start JIRA-12345-update-telemetry`
+  - Creates the task when it does not exist, provided a suffix or `--title` is given
+  - `-t, --title <title>` - Task title, when creating the task
+  - `--json` - Machine-readable output (returns the worktree path)
+  - `--no-worktree` - Skip worktree and branch creation
+- `sabin finish [ticket]` - Mark completed and remove the worktree
+  - `--keep-worktree`, `--json`
+- `sabin context` - Show the current workspace (ticket, branch, worktree, notes and prompt paths)
+  - `--json` - Small flat object; this is the agent's orienting call
+  - `-t, --ticket <ticket>` - Override branch inference
+- `sabin where [ticket]` - Print a single path, for shell interpolation
+  - `--notes` (default), `--prompt`, `--worktree`, `--task`, `--sabin`
 - `sabin task create` - Create a new task
-  - `-t, --title <title>` - Task title (will prompt if not provided)
-  - `-c, --content <content>` - Task content (will prompt if not provided)
-  - `-n, --number <number>` - Custom task ID (e.g., JIRA-12345)
+  - `-t, --title <title>`, `-c, --content <content>`, `-n, --number <number>`, `--slug <slug>`
 - `sabin task list` - List all tasks
-  - `-s, --status <status>` - Filter by status (open/ready/review/completed)
+  - `-s, --status <status>` - Filter by status
 - `sabin task update <id> <status>` - Update task status
-  - Positional args: task ID and new status
+  - `--json`
+- `sabin task show [id]` - Print a task file
+- `sabin notes new <name>` - Scaffold a note in the ticket notes directory and print its path
+  - `--template plan`, `-t, --ticket <ticket>`
+- `sabin prompts install` - Install workflow prompts as slash commands
+  - `-a, --agent <agent>` - Target agent (default: claude)
+
+**Ticket arguments are optional** and inferred from the current branch. Inference tries the configured
+`projectPrefix` first, then any uppercase JIRA-style key. A branch with no ticket is an **error, not a
+fallback** - resolving to the wrong ticket's notes would be worse than failing.
 
 Uses `chalk` for colored output, `ora` for spinners, and `@inquirer/prompts` for interactive input.
 
@@ -162,11 +229,28 @@ The `.sabin/config.json` file stores project-level settings:
 ```json
 {
   "projectPrefix": "TASK",
-  "taskNumberPadding": 4
+  "taskNumberPadding": 4,
+  "branch":    { "prefix": "angelo", "template": "{prefix}/{ticket}-{slug}" },
+  "worktrees": { "root": "../myproject-worktrees", "postCreate": [] },
+  "slug":      { "from": "title", "maxLength": 32, "stopWords": true },
+  "notesDir": "notes",
+  "promptsDir": "prompts"
 }
 ```
 
-Initialize with custom prefix: `sabin init --prefix MYPROJECT`
+All fields past `taskNumberPadding` are optional. `worktrees.root` is relative to the main clone and
+defaults to a sibling `<repo>-worktrees` directory; `postCreate` runs shell commands in a freshly
+created worktree (`npm ci`, symlinking `.env`). `notesDir` and `promptsDir` are relative to `.sabin`.
+
+Set up a new project in one command, run from inside the repo:
+
+```bash
+sabin init --shared ~/notes/myproject/.sabin -p MYPROJECT -b angelo
+```
+
+This creates the shared directory outside the repo, writes the `.sabin` link file into the repo, and
+adds `.sabin` to `.git/info/exclude` so the link is invisible to other contributors without touching
+the shared `.gitignore`. Omit the flags to be prompted.
 
 External task IDs (e.g., `JIRA-12345`) can be used with `-n` flag and are excluded from auto-increment counting.
 

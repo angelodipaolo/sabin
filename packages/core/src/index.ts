@@ -4,3 +4,6 @@ export * from './errors';
 export * from './config';
 export * from './sabinResolver';
 export * from './workingDir';
+export * from './git';
+export * from './lock';
+export * from './workspace';

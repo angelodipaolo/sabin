@@ -9,6 +9,8 @@ import {
   readConfig,
   resolveSabinDir,
   getWorkingDirName,
+  withLock,
+  slugify,
   Task
 } from '@sabin/core';
 
@@ -16,6 +18,7 @@ interface CreateTaskOptions {
   title?: string;
   content?: string;
   number?: string;
+  slug?: string;
 }
 
 export async function createTask(options: CreateTaskOptions): Promise<void> {
@@ -84,8 +87,8 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
         }
       }
     } else {
-      // Generate next task number using configured prefix
-      const nextNumber = await getNextTaskNumber(tasksDir, config);
+      // Allocate under a lock - concurrent worktrees would otherwise collide
+      const nextNumber = await withLock(sabinDir, () => getNextTaskNumber(tasksDir, config));
       taskId = `${config.projectPrefix}-${nextNumber}`;
       filename = `${taskId}.md`;
     }
@@ -100,6 +103,11 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
       path: filePath
     };
 
+    // Descriptive suffix for branch, notes and worktree names
+    if (options.slug) {
+      task.slug = slugify(options.slug);
+    }
+
     // Add working directory if using linked setup
     if (isLinked) {
       task.workingDir = getWorkingDirName(sabinDir, projectRoot);
@@ -110,6 +118,8 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
 
     spinner.succeed(chalk.green(`Created task: ${filename}`));
     console.log(chalk.gray(`Path: ${filePath}`));
+    // Bare ID on its own line so it can be piped into `sabin start`
+    console.log(taskId);
     if (task.workingDir) {
       console.log(chalk.gray(`Working directory: ${task.workingDir}`));
     }

@@ -6,13 +6,28 @@ import {
   parseTask,
   writeTask,
   resolveSabinDir,
-  getWorkingDirName
+  getWorkingDirName,
+  readConfig,
+  currentBranch,
+  ticketFromBranch,
+  repoRoot,
+  withLock
 } from '@sabin/core';
 
 type TaskStatus = 'open' | 'ready' | 'in_progress' | 'review' | 'completed';
 
-export async function updateStatus(taskId: string, newStatus: string): Promise<void> {
-  const spinner = ora(`Updating task ${taskId} status to ${newStatus}...`).start();
+interface UpdateStatusOptions {
+  json?: boolean;
+}
+
+export async function updateStatus(
+  taskId: string,
+  newStatus: string,
+  options: UpdateStatusOptions = {}
+): Promise<void> {
+  const spinner = options.json
+    ? undefined
+    : ora(`Updating task ${taskId} status to ${newStatus}...`).start();
 
   try {
     // Validate status
@@ -69,15 +84,28 @@ export async function updateStatus(taskId: string, newStatus: string): Promise<v
     const task = await parseTask(taskPath);
     task.status = newStatus as TaskStatus;
 
-    // Update working directory when moving to in_progress
-    if (newStatus === 'in_progress' && isLinked) {
-      task.workingDir = getWorkingDirName(sabinDir, projectRoot);
+    // Record where the work is happening when moving to in_progress
+    if (newStatus === 'in_progress') {
+      if (isLinked) {
+        task.workingDir = getWorkingDirName(sabinDir, projectRoot);
+      }
+
+      const config = await readConfig(sabinDir);
+      const branch = await currentBranch(process.cwd());
+
+      // Only claim the checkout when it actually belongs to this ticket
+      if (branch && ticketFromBranch(branch, config) === taskId.toUpperCase()) {
+        task.branch = branch;
+        const here = await repoRoot(process.cwd());
+        if (here) task.worktree = here;
+      }
     }
 
     // Determine if we need to move the file
     const shouldBeInCompleted = newStatus === 'completed';
     const isInCompleted = currentDir === 'completed';
 
+    await withLock(sabinDir, async () => {
     if (shouldBeInCompleted !== isInCompleted) {
       // Move file
       const filename = path.basename(taskPath);
@@ -96,19 +124,30 @@ export async function updateStatus(taskId: string, newStatus: string): Promise<v
       // Delete old file
       await fs.unlink(taskPath);
 
-      spinner.succeed(chalk.green(`Updated task ${taskId} status to ${newStatus}`));
-      console.log(chalk.gray(`Moved from ${currentDir} to ${shouldBeInCompleted ? 'completed' : 'open'}`));
+      spinner?.succeed(chalk.green(`Updated task ${taskId} status to ${newStatus}`));
+      if (!options.json) {
+        console.log(chalk.gray(`Moved from ${currentDir} to ${shouldBeInCompleted ? 'completed' : 'open'}`));
+      }
     } else {
       // Just update status in place
       await writeTask(task);
-      spinner.succeed(chalk.green(`Updated task ${taskId} status to ${newStatus}`));
+      spinner?.succeed(chalk.green(`Updated task ${taskId} status to ${newStatus}`));
     }
+    });
 
-    if (task.workingDir) {
+    if (options.json) {
+      console.log(JSON.stringify({
+        ticket: taskId,
+        status: newStatus,
+        taskFile: task.path,
+        branch: task.branch ?? null,
+        worktree: task.worktree ?? null
+      }, null, 2));
+    } else if (task.workingDir) {
       console.log(chalk.gray(`Working directory: ${task.workingDir}`));
     }
   } catch (error: any) {
-    spinner.fail(chalk.red(`Failed to update task status`));
+    spinner?.fail(chalk.red(`Failed to update task status`));
     console.error(chalk.red(error.message));
     process.exit(1);
   }

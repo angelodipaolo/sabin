@@ -45,6 +45,34 @@ describe('sabinResolver', () => {
       expect(result.projectRoot).toBe(projectDir);
     });
 
+    it('should find .sabin by walking up from a nested directory', async () => {
+      const sabinDir = path.join(testDir, '.sabin');
+      await fs.mkdir(sabinDir);
+      const nested = path.join(testDir, 'src', 'commands');
+      await fs.mkdir(nested, { recursive: true });
+
+      const result = await resolveSabinDir(nested);
+
+      expect(result.sabinDir).toBe(sabinDir);
+      expect(result.projectRoot).toBe(testDir);
+    });
+
+    it('should follow a link file found by walking up', async () => {
+      const sharedSabin = path.join(testDir, 'shared', '.sabin');
+      await fs.mkdir(sharedSabin, { recursive: true });
+
+      const projectDir = path.join(testDir, 'project-1');
+      const nested = path.join(projectDir, 'packages', 'core');
+      await fs.mkdir(nested, { recursive: true });
+      await writeSabinLink(projectDir, sharedSabin);
+
+      const result = await resolveSabinDir(nested);
+
+      expect(result.sabinDir).toBe(sharedSabin);
+      expect(result.isLinked).toBe(true);
+      expect(result.projectRoot).toBe(projectDir);
+    });
+
     it('should throw error when .sabin does not exist', async () => {
       await expect(resolveSabinDir(testDir)).rejects.toThrow('.sabin not found');
     });
