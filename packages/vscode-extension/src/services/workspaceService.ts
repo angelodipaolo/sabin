@@ -8,11 +8,10 @@ import {
   mainWorktreeRoot,
   ticketFromBranch,
   workspacePaths,
-  slugFromTitle,
-  findWorkspaceDir,
+  WorkspacePaths,
+  slugForTicket,
   codeWorkspacePath,
   writeCodeWorkspace,
-  DEFAULT_NOTES_DIR,
   SabinConfig
 } from '@sabin/core';
 
@@ -72,7 +71,6 @@ export class WorkspaceService {
    */
   public async listWorkspaces(): Promise<TaskWorkspace[]> {
     const sabinDir = await this.getSabinDir();
-    const config = await this.getConfig();
     const tasksDir = path.join(sabinDir, 'tasks');
 
     const workspaces: TaskWorkspace[] = [];
@@ -86,15 +84,14 @@ export class WorkspaceService {
         try {
           const task = await parseTask(taskFile);
           const ticket = path.basename(file, '.md');
-          const slug = await this.resolveSlug(ticket, task.slug, task.title, sabinDir, config);
-          const paths = workspacePaths({ ticket, slug }, sabinDir, await this.getMainRoot(), config);
+          const paths = await this.pathsFor(ticket, task.slug, task.title);
 
           workspaces.push({
             ticket,
             name: paths.name,
             title: task.title ?? ticket,
             status: task.status ?? 'open',
-            slug,
+            slug: paths.slug,
             taskFile,
             notesDir: paths.notesDir,
             promptFile: paths.promptFile,
@@ -135,25 +132,21 @@ export class WorkspaceService {
   }
 
   /**
-   * Mirrors the CLI's precedence so the extension and `sabin where` never
+   * Every path belonging to a ticket, given a task we have already parsed.
+   *
+   * Shares core's slug precedence so the extension and `sabin where` never
    * disagree about where a ticket's notes live.
    */
-  private async resolveSlug(
+  public async pathsFor(
     ticket: string,
-    recorded: string | undefined,
-    title: string,
-    sabinDir: string,
-    config: SabinConfig
-  ): Promise<string | null> {
-    if (recorded) return recorded;
+    recordedSlug: string | undefined,
+    title: string
+  ): Promise<WorkspacePaths> {
+    const sabinDir = await this.getSabinDir();
+    const config = await this.getConfig();
+    const slug = await slugForTicket(ticket, recordedSlug, title, sabinDir, config);
 
-    const notesRoot = path.resolve(sabinDir, config.notesDir ?? DEFAULT_NOTES_DIR);
-    const existing = await findWorkspaceDir(notesRoot, ticket);
-    if (existing && existing.length > ticket.length) {
-      return existing.slice(ticket.length + 1);
-    }
-
-    return title ? slugFromTitle(title, config) : null;
+    return workspacePaths({ ticket, slug }, sabinDir, await this.getMainRoot(), config);
   }
 
   /**

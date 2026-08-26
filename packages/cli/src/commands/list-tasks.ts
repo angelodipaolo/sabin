@@ -2,10 +2,15 @@ import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
 import {
+  findPlan,
+  mainWorktreeRoot,
   parseTask,
   readConfig,
   resolveSabinDir,
-  Task
+  SabinConfig,
+  slugForTicket,
+  Task,
+  workspacePaths
 } from '@sabin/core';
 
 interface ListTasksOptions {
@@ -27,6 +32,7 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
     const { sabinDir } = await resolveSabinDir();
     const tasksDir = path.join(sabinDir, 'tasks');
     const config = await readConfig(sabinDir);
+    const mainRoot = await mainWorktreeRoot(process.cwd());
     const tasks: Task[] = [];
 
     // Read tasks from open directory
@@ -87,8 +93,9 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
       console.log(`  ${chalk.gray('Title:')} ${task.title}`);
       console.log(`  ${chalk.gray('Status:')} ${statusColor(task.status)}`);
 
-      if (task.plan) {
-        console.log(`  ${chalk.gray('Plan:')} ${chalk.cyan(task.plan)}`);
+      const plan = await planFor(task, sabinDir, config, mainRoot);
+      if (plan) {
+        console.log(`  ${chalk.gray('Plan:')} ${chalk.cyan(plan)}`);
       }
 
       if (task.workingDir) {
@@ -104,6 +111,24 @@ export async function listTasks(options: ListTasksOptions): Promise<void> {
     console.error(error);
     process.exit(1);
   }
+}
+
+/**
+ * The ticket's plan, if it has one.
+ *
+ * Read from the filesystem rather than frontmatter: the plan lives at a fixed
+ * name in the notes directory, so the directory is the association.
+ */
+async function planFor(
+  task: Task,
+  sabinDir: string,
+  config: SabinConfig,
+  mainRoot: string | null
+): Promise<string | null> {
+  const ticket = path.basename(task.path, '.md');
+  const slug = await slugForTicket(ticket, task.slug, task.title, sabinDir, config);
+  const { notesDir } = workspacePaths({ ticket, slug }, sabinDir, mainRoot, config);
+  return findPlan(notesDir);
 }
 
 function extractTaskNumber(filepath: string, prefix: string): number {

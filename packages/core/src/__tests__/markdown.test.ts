@@ -16,7 +16,6 @@ describe('markdown utilities', () => {
       const mockContent = `---
 status: open
 title: Test Task
-plan: /path/to/plan.md
 ---
 
 This is the task content`;
@@ -28,10 +27,26 @@ This is the task content`;
       expect(task).toEqual({
         status: 'open',
         title: 'Test Task',
-        plan: '/path/to/plan.md',
         content: '\nThis is the task content',
         path: '/path/to/task.md'
       });
+    });
+
+    it('should ignore a legacy plan key', async () => {
+      // Tasks written before plans moved to notesDir/plan.md still carry it
+      const mockContent = `---
+status: open
+title: Test Task
+plan: .sabin/plans/TASK-0001.md
+---
+
+Content`;
+
+      mockFs.readFile.mockResolvedValue(mockContent);
+
+      const task = await parseTask('/path/to/task.md');
+
+      expect(task).not.toHaveProperty('plan');
     });
 
     it('should default status to open if not provided', async () => {
@@ -96,7 +111,6 @@ Content`;
       const task: Task = {
         status: 'ready',
         title: 'Test Task',
-        plan: '/plan.md',
         content: 'Task content',
         path: '/path/to/task.md'
       };
@@ -122,7 +136,7 @@ Content`;
       const task: Task = {
         status: 'ready',
         title: 'Fix: "auth" bug [critical] - User can\'t login',
-        plan: '/path/with spaces/plan.md',
+        worktree: '/path/with spaces/worktree',
         content: 'Content with special chars: @#$%',
         path: '/path/to/task.md'
       };
@@ -135,7 +149,7 @@ Content`;
       );
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         '/path/to/task.md',
-        expect.stringContaining('/path/with spaces/plan.md')
+        expect.stringContaining('/path/with spaces/worktree')
       );
     });
 

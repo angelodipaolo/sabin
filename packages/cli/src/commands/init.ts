@@ -163,7 +163,6 @@ async function scaffold(sabinDir: string): Promise<void> {
   const dirs = [
     path.join(sabinDir, 'tasks', 'open'),
     path.join(sabinDir, 'tasks', 'completed'),
-    path.join(sabinDir, 'plans'),
     path.join(sabinDir, 'research'),
     path.join(sabinDir, 'notes'),
     path.join(sabinDir, 'prompts')
@@ -193,7 +192,7 @@ async function report(
   }
 
   if (!alreadySetUp) {
-    console.log(chalk.gray('\n  tasks/{open,completed}   plans/   research/'));
+    console.log(chalk.gray('\n  tasks/{open,completed}   research/'));
     console.log(chalk.gray('  notes/     per-ticket, agent readable'));
     console.log(chalk.gray('  prompts/   per-ticket scratchpads, agent denied'));
   }

@@ -236,6 +236,56 @@ export function workspacePaths(
 }
 
 /**
+ * A ticket has exactly one plan, at a fixed name inside its notes directory.
+ *
+ * The path is derived rather than recorded, so there is nothing to attach and
+ * nothing that can drift from the file it names.
+ */
+export const PLAN_FILENAME = 'plan.md';
+
+export function planPath(notesDir: string): string {
+  return path.join(notesDir, PLAN_FILENAME);
+}
+
+/**
+ * The ticket's plan, or null when it has not been written yet
+ */
+export async function findPlan(notesDir: string): Promise<string | null> {
+  const file = planPath(notesDir);
+  try {
+    await fs.access(file);
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A ticket's descriptive suffix, resolved without touching git.
+ *
+ * The recorded value wins, then a directory already on disk, then the title.
+ * Mirrors resolveWorkspace's precedence for callers that already hold a
+ * parsed task and cannot afford a git call per ticket.
+ */
+export async function slugForTicket(
+  ticket: string,
+  recorded: string | null | undefined,
+  title: string | null | undefined,
+  sabinDir: string,
+  config: SabinConfig
+): Promise<string | null> {
+  if (recorded) return slugify(recorded);
+
+  const notesRoot = path.resolve(sabinDir, config.notesDir ?? DEFAULT_NOTES_DIR);
+  const existing = await findWorkspaceDir(notesRoot, ticket);
+  if (existing && existing.length > ticket.length) {
+    return existing.slice(ticket.length + 1);
+  }
+
+  return title ? slugFromTitle(title, config) : null;
+}
+
+/**
  * Find a directory belonging to a ticket, whatever suffix it carries.
  *
  * Lets paths keep resolving when the task file is gone, and keeps
@@ -357,18 +407,8 @@ async function resolveSlug(
 
   // An existing directory wins over derivation, so workspaces created before
   // title derivation was switched on keep resolving to their own paths
-  const notesRoot = path.resolve(sabinDir, config.notesDir ?? DEFAULT_NOTES_DIR);
-  const existing = await findWorkspaceDir(notesRoot, parsed.ticket);
-  if (existing && existing.length > parsed.ticket.length) {
-    return existing.slice(parsed.ticket.length + 1);
-  }
-
-  if (taskFile) {
-    const title = await readTaskTitle(taskFile);
-    if (title) return slugFromTitle(title, config);
-  }
-
-  return null;
+  const title = taskFile ? await readTaskTitle(taskFile) : null;
+  return slugForTicket(parsed.ticket, null, title, sabinDir, config);
 }
 
 async function readTaskTitle(taskFile: string): Promise<string | null> {

@@ -17,8 +17,11 @@ export function activate(context: vscode.ExtensionContext) {
     return;
   }
 
-  // Initialize shared task service
+  // Initialize shared services. The board resolves each ticket's plan through
+  // the workspace service, so it has to be wired up before the first render.
+  const workspaceService = new WorkspaceService(workspaceRoot);
   const taskService = TaskService.getInstance(workspaceRoot);
+  taskService.setWorkspaceService(workspaceService);
 
   const provider = new SabinWebviewProvider(context.extensionUri, taskService);
   context.subscriptions.push(
@@ -29,7 +32,6 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Workspace view: the focused task's own files, above the board
-  const workspaceService = new WorkspaceService(workspaceRoot);
   const workspaceTree = new WorkspaceTreeProvider(workspaceService);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('sabin.workspaceView', workspaceTree)

@@ -3,7 +3,6 @@ export interface Task {
   title: string;
   /** Descriptive suffix used for branch, notes and worktree names */
   slug?: string;
-  plan?: string;
   workingDir?: string;
   branch?: string;
   worktree?: string;

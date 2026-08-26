@@ -67,8 +67,8 @@ describe('CLI Commands', () => {
 
       expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/tasks/open'), { recursive: true });
       expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/tasks/completed'), { recursive: true });
-      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/plans'), { recursive: true });
       expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('.sabin/research'), { recursive: true });
+      expect(mockFs.mkdir).not.toHaveBeenCalledWith(expect.stringContaining('.sabin/plans'), { recursive: true });
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('.sabin/config.json'),
         expect.stringContaining('"projectPrefix": "TASK"')

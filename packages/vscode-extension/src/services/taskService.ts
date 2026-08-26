@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import matter from 'gray-matter';
+import { findPlan } from '@sabin/core';
+import { WorkspaceService } from './workspaceService';
 
 interface SabinConfig {
   projectPrefix: string;
@@ -17,7 +19,8 @@ export interface Task {
   id: string;
   status: 'open' | 'ready' | 'in_progress' | 'review' | 'completed';
   title: string;
-  plan?: string;
+  /** Absolute path to the ticket's plan, set only when it exists on disk */
+  planPath?: string;
   workingDir?: string;
   content: string;
   path: string;
@@ -34,8 +37,18 @@ export class TaskService {
   private sabinDir: string | null = null;
   private isLinked: boolean = false;
 
+  private workspaceService: WorkspaceService | null = null;
+
   private constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
+  }
+
+  /**
+   * Supplies the notes directory behind each ticket, which is where a plan
+   * lives. Injected rather than constructed so both views share one resolver.
+   */
+  public setWorkspaceService(service: WorkspaceService): void {
+    this.workspaceService = service;
   }
 
   public static getInstance(workspaceRoot?: string): TaskService {
@@ -193,16 +206,38 @@ export class TaskService {
     const content = fs.readFileSync(filePath, 'utf8');
     const { data, content: body } = matter(content);
 
+    const id = path.basename(filePath, '.md');
+    const title = data.title || id;
+
     return {
-      id: path.basename(filePath, '.md'),
+      id,
       status: data.status || 'open',
-      title: data.title || path.basename(filePath, '.md'),
-      plan: data.plan,
+      title,
+      planPath: (await this.resolvePlan(id, data.slug, title)) ?? undefined,
       workingDir: data.workingDir,
       content: body,
       path: filePath,
       filename: path.basename(filePath)
     };
+  }
+
+  /**
+   * The ticket's plan, read from the filesystem rather than frontmatter:
+   * one plan per ticket, at a fixed name inside its notes directory.
+   */
+  private async resolvePlan(
+    ticket: string,
+    slug: string | undefined,
+    title: string
+  ): Promise<string | null> {
+    if (!this.workspaceService) return null;
+
+    try {
+      const { notesDir } = await this.workspaceService.pathsFor(ticket, slug, title);
+      return await findPlan(notesDir);
+    } catch {
+      return null;
+    }
   }
 
   /**

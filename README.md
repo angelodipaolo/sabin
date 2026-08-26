@@ -11,8 +11,8 @@ Sabin manages work through simple markdown files with YAML frontmatter, organize
     open/TASK-0001.md       # Initial requirements
     open/TASK-0002.md       # Ready for implementation
     completed/TASK-0003.md  # Done and committed
-  plans/                    # Implementation plans
-  research/                 # Context and research
+  notes/TASK-0001/          # Per-ticket notes, with the ticket's plan.md
+  research/                 # Cross-cutting context and research
 ```
 Each task moves through a clear lifecycle:
 - open → Initial requirements, needs planning

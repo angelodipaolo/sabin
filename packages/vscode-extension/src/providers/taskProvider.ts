@@ -123,7 +123,7 @@ export class TaskItem extends vscode.TreeItem {
 
     this.iconPath = new vscode.ThemeIcon(iconMap[task.status] || 'circle-outline');
 
-    if (task.plan) {
+    if (task.planPath) {
       this.description = `${task.title} 📄`;
     }
   }

@@ -13,15 +13,19 @@ Create an implementation plan for a task.
 3. **Research the codebase** before writing anything. Read the files the work
    will touch, and cite them as `path/to/file.ts:42` in the plan.
 
-4. **Write the plan** into the ticket's notes directory:
+4. **Write the plan** into the ticket's notes directory, at `plan.md`:
 
 ```bash
 sabin notes new plan --template plan     # prints the path it created
 ```
 
-   Use a distinct name when a ticket needs more than one — `plan-api.md`,
-   `plan-migration.md`. A ticket's notes directory holds as many plans as the
-   work needs; there is no frontmatter field to maintain.
+   A ticket has exactly one plan. Work that runs in stages becomes phases
+   inside that one file — never a second plan file. There is no frontmatter
+   field to maintain; the association is the directory plus the fixed name.
+
+   **Re-planning revises `plan.md` in place.** Read what is there and edit it,
+   rather than regenerating from scratch — the existing plan usually carries
+   decisions and constraints that are cheaper to keep than to rediscover.
 
 5. **Mark the task ready** once the plan is complete:
 

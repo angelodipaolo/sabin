@@ -75,14 +75,15 @@ The system uses a file-based approach with this directory structure:
   tasks/
     open/              # Tasks with status: open, ready, or review
     completed/         # Tasks with status: completed
-  plans/               # Implementation plan documents
-  research/            # Research and context documents
+  research/            # Cross-cutting research and context documents
+  notes/               # Per-ticket notes, including each ticket's plan.md
+  prompts/             # Per-ticket prompt scratchpads (agent denied)
 ```
 
 ### Task Structure
 
 Tasks are markdown files with YAML frontmatter:
-- **Frontmatter fields**: `status` (open/ready/in_progress/review/completed), `title`, `slug` (optional descriptive suffix), `plan` (optional path to plan file), `branch`, `worktree`, `workingDir`
+- **Frontmatter fields**: `status` (open/ready/in_progress/review/completed), `title`, `slug` (optional descriptive suffix), `branch`, `worktree`, `workingDir`
 - **Statuses**:
   - `open`: Initial requirements, not ready for implementation
   - `ready`: Has enough detail/plan for implementation
@@ -120,6 +121,13 @@ original rather than orphaning directories.
 The prompt file is a human scratchpad for drafting prompts. It lives outside the repo tree so the agent
 never sees it. Notes are where the agent reads context and writes plans and docs.
 
+**A ticket has exactly one plan, at `plan.md` in its notes directory.** There is no `plan:` frontmatter
+field: the association is the directory plus a fixed name, so nothing has to be attached and nothing can
+drift from the file it names. Work that runs in stages becomes phases inside that one file - the plan
+template already ships `## Implementation Phases` for exactly that. Re-planning revises `plan.md` in
+place. `sabin task list` reports a plan by checking the filesystem, so the CLI and the agent always
+agree about where it is.
+
 **The CLI owns what the filesystem cannot know** - branch inference, ID allocation, status transitions
 (status lives in *both* frontmatter and the containing directory, so direct edits desynchronise them),
 and worktree lifecycle. File tools own bytes. There are deliberately no note CRUD commands: once
@@ -130,7 +138,9 @@ and worktree lifecycle. File tools own bytes. There are deliberately no note CRU
 Located in `packages/core/src/`:
 - `types.ts`: Defines `Task`, `SabinConfig` and related interfaces
 - `git.ts`: Branch, worktree and repo-root helpers (`currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree`)
-- `workspace.ts`: `ticketFromBranch()`, `parseTicketArg()`, `workspaceName()`, `workspacePaths()`, `resolveWorkspace()`, `findTaskFile()`
+- `workspace.ts`: `ticketFromBranch()`, `parseTicketArg()`, `workspaceName()`, `workspacePaths()`, `resolveWorkspace()`, `findTaskFile()`, `slugForTicket()`, `planPath()`, `findPlan()`
+  - `slugForTicket()` resolves a ticket's suffix without a git call, for callers listing every task at once
+  - `findPlan()` returns `notesDir/plan.md` when it exists - the one place that answers "does this ticket have a plan"
 - `lock.ts`: `withLock()` - mkdir-based, scoped to ID allocation and status mutations only
 - `sabinResolver.ts`: Resolves `.sabin` (directory or link file), walking up and falling back to the main worktree root
 - `markdown.ts`: Utility functions for parsing/writing tasks and TODO files

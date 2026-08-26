@@ -51,8 +51,10 @@ you or the user might read later belongs here.
   with the plan template, `sabin notes new plan --template plan` prints the
   path it created.
 
-Plans live in the ticket's notes directory, one file per plan. There is no
-`plan:` frontmatter field to maintain — the association is the directory.
+A ticket has exactly one plan, at `plan.md` in its notes directory. There is
+no `plan:` frontmatter field — the association is the directory plus a fixed
+name, so there is nothing to attach and nothing that can drift. A plan with
+several stages is phases inside that one file, not several files.
 
 ## Task lifecycle
 

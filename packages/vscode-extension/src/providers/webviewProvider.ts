@@ -142,19 +142,17 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * The path arrives already resolved - a ticket's plan is plan.md in its
+   * notes directory, which the task service reads off disk.
+   */
   private async openPlan(planPath: string) {
     if (!planPath) {
       return;
     }
 
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-    if (!workspaceRoot) {
-      return;
-    }
-
-    const fullPath = path.join(workspaceRoot, planPath);
-    if (fs.existsSync(fullPath)) {
-      const document = await vscode.workspace.openTextDocument(fullPath);
+    if (fs.existsSync(planPath)) {
+      const document = await vscode.workspace.openTextDocument(planPath);
       await vscode.window.showTextDocument(document);
     } else {
       vscode.window.showErrorMessage(`Plan file not found: ${planPath}`);
@@ -312,8 +310,8 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
                   html += '<div class="ticket-header">';
                   html += '<div class="ticket-id-section">';
                   html += '<span class="ticket-number">' + task.id + '</span>';
-                  if (task.plan) {
-                    html += '<button class="plan-label" data-plan="' + task.plan + '" title="View plan">';
+                  if (task.planPath) {
+                    html += '<button class="plan-label" data-plan="' + task.planPath + '" title="View plan">';
                     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
                     html += '</button>';
                   }
@@ -365,8 +363,8 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
                   html += '<div class="ticket-header">';
                   html += '<div class="ticket-id-section">';
                   html += '<span class="ticket-number">' + task.id + '</span>';
-                  if (task.plan) {
-                    html += '<button class="plan-label" data-plan="' + task.plan + '" title="View plan">';
+                  if (task.planPath) {
+                    html += '<button class="plan-label" data-plan="' + task.planPath + '" title="View plan">';
                     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
                     html += '</button>';
                   }

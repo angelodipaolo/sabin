@@ -4,7 +4,7 @@ description: Implement a task based on its plan
 
 # Implementation System
 
-Execute a Sabin task. A task may have one or more plans in its notes
+Execute a Sabin task. A task may have a plan at `plan.md` in its notes
 directory, or it may carry direct instructions.
 
 ## Getting Started
@@ -24,7 +24,7 @@ directory, or it may carry direct instructions.
 
 4. `sabin task update <TICKET> in_progress`
 
-**If the notes directory contains a plan:**
+**If the notes directory contains `plan.md`:**
 - Read it completely
 - Note existing checkmarks (`- [x]`) - these are done
 - Read all files referenced in the plan (no limit/offset parameters)
