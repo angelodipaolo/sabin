@@ -64,12 +64,19 @@ Plans live in the ticket's notes directory, one file per plan. There is no
 | `review` | Work finished and committed, not yet verified | **You, when you finish** |
 | `completed` | Approved | **The user, never you** |
 
-`review` is your ceiling. When you finish a task, move it to `review` and say
-so — that is the end of your side of the exchange.
+`review` is your ceiling. When you finish a task, move it to `review`, then
+**tell the user it is waiting on them and name the next step**:
+
+> SABIN-0002 is in review. Run `/sabin-task-complete` once you have verified it,
+> or say so and I will close it out.
+
+Without that handoff the task stalls: you consider it done, the user does not
+know it is waiting, and it sits in `review` indefinitely.
 
 **Only move a task to `completed` when the user has approved the work.** Your
-own tests passing is not approval. "Looks good", "ship it", "merge it" is. If
-you are unsure whether a message was approval, ask rather than closing it.
+own tests passing is not approval. "Looks good", "ship it", "merge it", or
+invoking `/sabin-task-complete` is. If you are unsure whether a message was
+approval, ask rather than closing it.
 
 Completing moves the task file from `tasks/open/` to `tasks/completed/`, which
 is a change git sees. Include that move in the commit that closes out the work,
@@ -112,6 +119,18 @@ reads. If you somehow encounter its contents, ignore them and say so.
 | `sabin task create -t "<title>"` | Create a task, with its notes directory |
 | `sabin notes new <name>` | Scaffold a note and print its path |
 | `sabin task list [-s <status>]` | See what else is in flight |
+
+## Slash commands
+
+The user drives the workflow with these; you follow them rather than invoking
+them yourself:
+
+| Command | When the user runs it |
+| --- | --- |
+| `/sabin-task-create` | Turn a rough idea into a detailed task |
+| `/sabin-plan` | Write an implementation plan into the ticket's notes |
+| `/sabin-task-implement` | Do the work |
+| `/sabin-task-complete` | Approve finished work: mark completed and commit |
 
 `sabin draft`, `sabin start`, and `sabin finish` create and tear down
 worktrees. Those are the user's to run, not yours — suggest them, do not
