@@ -137,6 +137,9 @@ and worktree lifecycle. File tools own bytes. There are deliberately no note CRU
 
 Located in `packages/core/src/`:
 - `types.ts`: Defines `Task`, `SabinConfig` and related interfaces
+- `agents.ts`: `resolveAgent()`, `agentArgv()`, `buildTaskPrompt()` - which agent to launch, its
+  argv, and what it gets prompted with. Deliberately pure and in core rather than the CLI, so a
+  future orchestrator composes the same prompts without shelling out to `sabin run`.
 - `git.ts`: Branch, worktree and repo-root helpers (`currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree`)
 - `workspace.ts`: `ticketFromBranch()`, `parseTicketArg()`, `workspaceName()`, `workspacePaths()`, `resolveWorkspace()`, `findTaskFile()`, `slugForTicket()`, `planPath()`, `findPlan()`
   - `slugForTicket()` resolves a ticket's suffix without a git call, for callers listing every task at once
@@ -188,6 +191,15 @@ Located in `packages/cli/src/`:
   - `-t, --title <title>` - Task title, when creating the task
   - `--json` - Machine-readable output (returns the worktree path)
   - `--no-worktree` - Skip worktree and branch creation
+- `sabin run [ticket]` - Launch a coding agent on a ticket, prompted with the task itself
+  - Does what `start` does first (worktree, branch, notes, `in_progress`), then spawns the agent
+    with its cwd set to the worktree - which is why no `cd` or shell wrapper is needed
+  - `-a, --agent <name>`, with `--claude` and `--codex` as shorthands
+  - `--print` - Compose the prompt, write it to stdout and exit. A pure read: no worktree, no
+    status change, so it stays safe to pipe
+  - `--no-start` - Only launch; leave the workspace and status alone
+  - Unlike `start`, this refuses to create a missing task - an invented task is nothing to
+    prompt an agent with
 - `sabin finish [ticket]` - Mark completed and remove the worktree
   - `--keep-worktree`, `--json`
 - `sabin context` - Show the current workspace (ticket, branch, worktree, notes and prompt paths)
@@ -213,9 +225,14 @@ Located in `packages/cli/src/`:
   - `-a, --agent <agent>` - Target agent (default: claude)
 
 **Lifecycle**: `task create` or `draft` scaffold the notes directory and scratchpad while the task is
-still `open`. `start` adds the worktree and branch and flips the status to `in_progress`. `finish`
-completes it and removes the worktree. Drafting is deliberately separate from starting, because a
-prompt gets written before there is anything to check out.
+still `open`. `start` adds the worktree and branch and flips the status to `in_progress`. `run` does
+all of that and then hands the task to an agent. `finish` completes it and removes the worktree.
+Drafting is deliberately separate from starting, because a prompt gets written before there is
+anything to check out.
+
+`start` and `run` share one implementation: `ensureWorkspace()` in `packages/cli/src/workspace-start.ts`
+owns worktree creation, the `.sabin` link, `postCreate`, notes scaffolding and the locked status write.
+`start` adds a report; `run` adds a launch.
 
 **Ticket arguments are optional** and inferred from the current branch. Inference tries the configured
 `projectPrefix` first, then any uppercase JIRA-style key. A branch with no ticket is an **error, not a
@@ -281,6 +298,7 @@ The `.sabin/config.json` file stores project-level settings:
   "branch":    { "prefix": "angelo", "template": "{prefix}/{ticket}-{slug}" },
   "worktrees": { "root": "../myproject-worktrees", "postCreate": [] },
   "slug":      { "from": "title", "maxLength": 32, "stopWords": true },
+  "agents":    { "default": "claude", "definitions": {} },
   "notesDir": "notes",
   "promptsDir": "prompts"
 }
@@ -289,6 +307,28 @@ The `.sabin/config.json` file stores project-level settings:
 All fields past `taskNumberPadding` are optional. `worktrees.root` is relative to the main clone and
 defaults to a sibling `<repo>-worktrees` directory; `postCreate` runs shell commands in a freshly
 created worktree (`npm ci`, symlinking `.env`). `notesDir` and `promptsDir` are relative to `.sabin`.
+
+`agents.definitions` layers over the built-in `claude` and `codex`, so retuning one does not mean
+redeclaring the rest:
+
+```json
+"agents": {
+  "default": "codex",
+  "definitions": {
+    "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
+    "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
+  }
+}
+```
+
+Each argument may contain `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` or `{taskFile}`. A
+definition that never mentions `{prompt}` gets it appended as the final argument, so a bare
+`{ "command": "aider" }` still launches a prompted agent rather than an empty one.
+
+**Agents are data, not code** - which is the seam orchestration will need. Adding an agent is a
+config edit, `buildTaskPrompt()` and `resolveAgent()` are exported from core, and `--print` puts the
+exact prompt on stdout with no side effects. The verb `dispatch` is deliberately left unclaimed for
+the eventual fan-out command; keeping `run` foreground and single-ticket is what keeps it free.
 
 Set up a new project in one command, run from inside the repo:
 

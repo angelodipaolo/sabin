@@ -29,6 +29,16 @@ export class SabinDirectoryNotFoundError extends SabinError {
   }
 }
 
+export class UnknownAgentError extends SabinError {
+  constructor(name: string, known: string[]) {
+    super(
+      `Unknown agent: ${name}. Known agents: ${known.join(', ')}.\n` +
+      `Add one under "agents.definitions" in config.json.`,
+      'UNKNOWN_AGENT'
+    );
+  }
+}
+
 export function handleError(error: unknown): void {
   if (error instanceof SabinError) {
     console.error(`\x1b[31m[${error.code}]\x1b[0m ${error.message}`);

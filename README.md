@@ -171,6 +171,30 @@ See `.claude-plugin/README.md` for detailed plugin documentation.
 
 **Note**: The plugin, CLI, and VS Code extension are separate installations that work together.
 
+## Installation as Codex Skill
+
+Sabin can be installed as a Codex skill for use across any project (global install).
+
+### Prerequisites
+
+- Codex installed and configured
+
+### Install via Skill Installer
+
+Use the Codex skill installer script to install from GitHub into `~/.codex/skills`:
+
+```bash
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo yourusername/sabin \
+  --path .codex/skills/sabin
+```
+
+Then restart Codex to pick up the new skill.
+
+### Global Install (All Projects)
+
+Codex loads global skills from `~/.codex/skills`. After installing, the Sabin skill is available in any project without adding repo-scoped files.
+
 ## Configuration
 
 Sabin uses a configuration file at `.sabin/config.json` to customize project settings.
@@ -198,6 +222,27 @@ The configuration file (`.sabin/config.json`) has the following structure:
 **Examples:**
 - Default: `TASK-0001`, `TASK-0002`, etc.
 - Custom: `MYPROJECT-0001`, `MYPROJECT-0002`, etc.
+
+### Coding Agents
+
+`sabin run <ticket>` launches a coding agent already prompted with the task. `claude` and
+`codex` work out of the box; anything else is a few lines of config:
+
+```json
+{
+  "agents": {
+    "default": "claude",
+    "definitions": {
+      "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
+      "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
+    }
+  }
+}
+```
+
+Each argument may contain `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` or `{taskFile}`.
+A definition that never mentions `{prompt}` gets it appended as the final argument, so
+`{ "command": "aider" }` on its own does the obvious thing.
 
 ### External Task IDs
 
@@ -241,6 +286,12 @@ sabin task list -s open
 
 # Update task status
 sabin task update TASK-0001 ready
+
+# Kick off an agent on a task: worktree, branch, status and prompt in one command
+sabin run TASK-0001                  # Default agent (claude)
+sabin run TASK-0001 --codex          # Or codex
+sabin run TASK-0001 -a aider         # Or anything configured
+sabin run TASK-0001 --print          # Just show the prompt, change nothing
 ```
 
 ## License
