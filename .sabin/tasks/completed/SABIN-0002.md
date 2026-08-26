@@ -1,5 +1,5 @@
 ---
-status: review
+status: completed
 title: 'Task workspaces - worktree, notes, and prompt file per ticket'
 plan: .sabin/plans/SABIN-0002-task-workspaces.md
 ---

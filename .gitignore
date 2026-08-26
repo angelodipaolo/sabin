@@ -90,3 +90,6 @@ desktop.ini
 
 # Prompt scratchpads are personal, even when .sabin is committed
 .sabin/prompts/
+
+# Generated, and VS Code rewrites it on every task switch
+.sabin/*.code-workspace
