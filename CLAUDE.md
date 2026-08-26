@@ -163,6 +163,11 @@ Located in `packages/cli/src/`:
   - `--no-exclude` - Skip adding `.sabin` to `.git/info/exclude`
   - Pointing a second repo at an existing shared `.sabin` just links it, leaving the config alone
 - `sabin link <path>` - Link this project to a shared `.sabin` directory (`init --shared` does this for you)
+- `sabin open [ticket]` - Open the project in your editor: board, notes and prompts in one window
+  - Opens the generated `.code-workspace`, which is what lets the extension swap folders per task
+  - `--worktree`, `--notes`, `--prompt`, `--sabin` - open that part of a ticket instead
+  - `-n, --new-window`, `-e, --editor <command>`
+  - Editor precedence: `--editor`, `SABIN_EDITOR`, `editor` in `config.json`, then `code`
 - `sabin start <ticket>` - Create the worktree, branch, notes directory and prompt file. Idempotent.
   - Accepts a descriptive suffix: `sabin start JIRA-12345-update-telemetry`
   - Creates the task when it does not exist, provided a suffix or `--title` is given

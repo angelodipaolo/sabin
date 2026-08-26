@@ -12,6 +12,7 @@ import { showTask } from './commands/show-task';
 import { startTask } from './commands/start';
 import { finishTask } from './commands/finish';
 import { notesNew } from './commands/notes';
+import { open } from './commands/open';
 
 const program = new Command();
 
@@ -53,6 +54,18 @@ program
   .option('--keep-worktree', 'Leave the worktree in place')
   .option('--json', 'Output machine-readable JSON')
   .action(finishTask);
+
+program
+  .command('open')
+  .description('Open the project in your editor (board, notes and prompts in one window)')
+  .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
+  .option('--worktree', "Open the ticket's worktree instead")
+  .option('--notes', "Open the ticket's notes directory instead")
+  .option('--prompt', "Open the ticket's prompt scratchpad instead")
+  .option('--sabin', 'Open the .sabin directory instead')
+  .option('-n, --new-window', 'Force a new editor window')
+  .option('-e, --editor <command>', 'Editor command (default: code)')
+  .action(open);
 
 program
   .command('context')
