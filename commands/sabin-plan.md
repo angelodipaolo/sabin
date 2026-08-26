@@ -6,49 +6,47 @@ Create an implementation plan for a task.
 
 ## Steps
 
-1. Read the task file to understand requirements:
+1. **Orient.** Run `sabin context --json` to get the ticket, its task file, and
+   its notes directory. If it errors, stop and ask which ticket to plan — do not
+   guess a path.
+
+2. **Read what exists.** Read the task file (`sabin task show`), then list and
+   read the notes directory. Earlier notes usually carry decisions and context
+   you would otherwise re-derive.
+
+3. **Research the codebase** before writing anything. Read the files the work
+   will touch, and cite them as `path/to/file.ts:42` in the plan.
+
+4. **Write the plan** into the ticket's notes directory:
+
 ```bash
-cat .sabin/tasks/open/TASK-XXXX.md
+sabin notes new plan --template plan     # prints the path it created
 ```
 
-2. Create a plan file in `.sabin/plans/` with:
-   - Overview of the task
-   - Current state analysis
-   - Desired end state
-   - What we're NOT doing
-   - Implementation phases with specific changes
-   - Success criteria for each phase
+   Use a distinct name when a ticket needs more than one — `plan-api.md`,
+   `plan-migration.md`. A ticket's notes directory holds as many plans as the
+   work needs; there is no frontmatter field to maintain.
 
-3. Link the plan to the task by adding a `plan:` field to the task's frontmatter:
-```yaml
----
-status: ready
-title: Your task title
-description: Brief description
-plan: .sabin/plans/your-plan-name.md
----
+5. **Mark the task ready** once the plan is complete:
+
+```bash
+sabin task update <TICKET> ready
 ```
-
-4. Update the task status to `ready` when the plan is complete.
 
 ## Plan Structure
 
-A good plan includes:
-- **Overview**: What we're building
-- **Current State**: What exists now
-- **Desired End State**: What success looks like
-- **Implementation Phases**: Step-by-step breakdown with:
-  - Files to change
-  - Specific code changes
-  - Success criteria
-  - Testing approach
+- **Overview**: what we're building
+- **Current State**: what exists now, with file references
+- **Desired End State**: what success looks like
+- **What We're NOT Doing**: scope boundaries, stated explicitly
+- **Implementation Phases**: each with files to change, specific changes, and
+  success criteria
+- **Open Decisions**: anything that needs the user's call, flagged rather than
+  silently decided
 
-## Example
+## Rules
 
-```bash
-# Create plan file
-echo "# Implementation Plan for Feature X" > .sabin/plans/feature-x-plan.md
-
-# Link plan to task
-sabin update-status TASK-0001 ready
-```
+- Never hardcode `.sabin/...` paths. In a worktree with a shared Sabin
+  directory they do not exist — resolve every path through the CLI.
+- Never read the prompts directory.
+- Change status with `sabin task update`, never by editing frontmatter.

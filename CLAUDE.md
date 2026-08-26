@@ -285,9 +285,26 @@ the shared `.gitignore`. Omit the flags to be prompted.
 
 External task IDs (e.g., `JIRA-12345`) can be used with `-n` flag and are excluded from auto-increment counting.
 
+## Agent Integration
+
+`skills/sabin/SKILL.md` is the agent contract, installed by `sabin prompts install` to
+`~/.claude/skills/sabin/`. It tells an agent to:
+
+1. Run `sabin context --json` at session start; if it errors, stop and ask rather than guess
+2. Write everything durable under the returned `notesDir`
+3. Change status with `sabin task update`, never by editing frontmatter
+4. Never read the prompts directory
+
+Rule 4 is enforced, not requested: `sabin init` writes a `permissions.deny` rule to the project's
+`.claude/settings.local.json`, using the `Read(//absolute/path/**)` form (a single leading slash
+anchors at the settings file, not the filesystem root). `sabin context --json` also omits `promptFile`
+— handing an agent the path to the file it is told to ignore would undercut the whole arrangement.
+
 ## Workflow Prompts
 
-The `prompts/` directory contains workflow guidance for Claude Code:
+The `prompts/` directory contains workflow guidance for Claude Code. None of them hardcode `.sabin/`
+paths — those break in a worktree with a shared Sabin directory, so every path is resolved through
+the CLI:
 - `task-create.md`: Guide for creating new tasks
 - `plan.md`: Creating implementation plans for tasks
 - `task-implement.md`: Implementing tasks based on plans

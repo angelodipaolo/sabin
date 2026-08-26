@@ -11,6 +11,7 @@ import {
   checkSabinType,
   writeSabinLink,
   writeCodeWorkspace,
+  denyPromptsAccess,
   isGitRepo,
   git,
   SabinConfig
@@ -56,6 +57,10 @@ export async function initProject(options: InitOptions): Promise<void> {
     // The extension swaps ticket folders inside this workspace file
     const codeWorkspace = await writeCodeWorkspace(sabinDir, projectRoot);
 
+    // Stop agents reading the prompt scratchpads
+    const promptsDir = path.resolve(sabinDir, (await readConfig(sabinDir)).promptsDir ?? 'prompts');
+    const denied = await denyPromptsAccess(projectRoot, promptsDir);
+
     // A shared directory lives outside the repo, so the repo needs a pointer
     let excluded = false;
     if (isShared) {
@@ -66,7 +71,7 @@ export async function initProject(options: InitOptions): Promise<void> {
     }
 
     spinner.succeed(chalk.green(alreadySetUp ? 'Linked to shared .sabin' : 'Sabin initialized'));
-    await report(sabinDir, projectRoot, isShared, alreadySetUp, excluded, codeWorkspace);
+    await report(sabinDir, projectRoot, isShared, alreadySetUp, excluded, codeWorkspace, denied.path);
   } catch (error: any) {
     if (error?.name === 'ExitPromptError') {
       console.error(chalk.yellow('\nCancelled'));
@@ -203,7 +208,8 @@ async function report(
   isShared: boolean,
   alreadySetUp: boolean,
   excluded: boolean,
-  codeWorkspace: string
+  codeWorkspace: string,
+  denyRulePath: string
 ): Promise<void> {
   const config = await readConfig(sabinDir);
 
@@ -219,6 +225,7 @@ async function report(
     console.log(chalk.gray('  prompts/   per-ticket scratchpads, agent denied'));
   }
 
+  console.log(chalk.gray(`Prompts denied: ${path.relative(projectRoot, denyRulePath)}`));
   console.log(chalk.cyan(`\nTask prefix:   ${config.projectPrefix}`));
   if (config.branch?.prefix) {
     console.log(chalk.cyan(`Branch prefix: ${config.branch.prefix}`));

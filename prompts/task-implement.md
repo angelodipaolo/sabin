@@ -1,27 +1,36 @@
 # Implementation System
 
-Execute tasks from `.sabin/tasks/open/[ID].md`. Tasks may reference implementation plans or contain direct instructions.
+Execute a Sabin task. A task may have one or more plans in its notes
+directory, or it may carry direct instructions.
 
 ## Getting Started
 
-You will always receive a task file path: `.sabin/tasks/open/[ID].md`
+1. **Orient.** Run `sabin context --json`. It returns the ticket, its status,
+   its task file, its notes directory, and what is already in there. If it
+   errors, stop and ask which ticket to implement — never guess a path, and
+   never hardcode `.sabin/...`, which does not exist in a worktree with a
+   shared Sabin directory.
 
-1. Run `sabin task update [ID] in_progress`
-2. Read task file frontmatter to check for `plan` field
+2. **Read the task:** `sabin task show`
 
-**If `plan` field exists:**
-- Extract plan path (e.g., `.sabin/plans/PLAN.md`)
-- Read plan file completely
+3. **Read the notes.** Everything durable for this ticket lives in `notesDir`:
+   plans, research, design docs, context files. Read what is relevant before
+   writing code — earlier notes usually carry decisions you would otherwise
+   re-litigate.
+
+4. `sabin task update <TICKET> in_progress`
+
+**If the notes directory contains a plan:**
+- Read it completely
 - Note existing checkmarks (`- [x]`) - these are done
-- Read all files referenced in plan (no limit/offset parameters)
-- Start implementing from first unchecked item
-- Follow "Plan-Based Implementation" flow below
+- Read all files referenced in the plan (no limit/offset parameters)
+- Start implementing from the first unchecked item
+- Follow "Plan-Based Implementation" below
 
-**If no `plan` field:**
-- Read task file completely
-- Follow instructions in task file directly
-- Apply same verification principles
-- Follow "Direct Task Implementation" flow below
+**If there is no plan:**
+- Follow the task's instructions directly
+- Apply the same verification principles
+- Follow "Direct Task Implementation" below
 
 ## Plan-Based Implementation
 
@@ -138,7 +147,7 @@ Wait for user guidance before proceeding.
 ## Progress Tracking
 
 **Mark items complete immediately after verification passes:**
-- Change `- [ ]` to `- [x]` in plan file
+- Change `- [ ]` to `- [x]` in the plan file, in the ticket's notes directory
 - Use Edit tool to update the plan
 - Creates resume points if work is interrupted
 
@@ -160,6 +169,21 @@ Wait for user guidance before proceeding.
 - Isolated problem investigation
 
 Don't spawn sub-tasks for general implementation.
+
+## Saving Work Product
+
+Anything durable you produce along the way - research, findings, design
+decisions, saved output - belongs in the ticket's notes directory, not in the
+conversation and not scattered in the repo. Notes are any file type an agent or
+the user might read later: markdown, JSON, YAML, CSV, logs.
+
+```bash
+sabin where --notes        # the directory to write into
+sabin notes new <name>     # scaffold a file and print its path
+```
+
+Never read or write the prompts directory. It holds the user's own draft
+prompts and is not addressed to you.
 
 ## Completion
 

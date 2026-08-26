@@ -1,5 +1,5 @@
 ---
-status: open
+status: review
 title: Rewrite workflow prompts and skill to use the CLI
 plan: .sabin/plans/SABIN-0002-task-workspaces.md
 ---

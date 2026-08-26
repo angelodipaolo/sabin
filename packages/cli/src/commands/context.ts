@@ -11,8 +11,11 @@ interface ContextOptions {
 /**
  * Report everything about the current workspace.
  *
- * This is the agent's orienting call, so the JSON stays small and flat -
- * a verbose dump gets skimmed and the paths get ignored.
+ * This is the agent's orienting call, so the JSON stays small and flat - a
+ * verbose dump gets skimmed and the paths get ignored. It also omits the
+ * prompt scratchpad: handing an agent the path to the file it is told to
+ * ignore undercuts the whole arrangement. The human-readable form still shows
+ * it, since that is for you.
  */
 export async function showContext(options: ContextOptions): Promise<void> {
   const { workspace } = await getWorkspace(options.ticket);
@@ -32,7 +35,6 @@ export async function showContext(options: ContextOptions): Promise<void> {
       worktree: worktreeExists ? workspace.worktreeDir : null,
       sabinDir: workspace.sabinDir,
       notesDir: workspace.notesDir,
-      promptFile: workspace.promptFile,
       taskFile: workspace.taskFile,
       notes
     }, null, 2));

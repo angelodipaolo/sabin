@@ -137,17 +137,24 @@ Rule 4 is enforced, not requested: the directory sits outside the repo tree, and
 
 ## Open Decisions
 
-**1. Do plans fold into `notes/<TICKET>/`?**
+**1. Do plans fold into `notes/<TICKET>/`? — RESOLVED: yes.**
 
 If a plan is just a file in the ticket's notes directory, then `SABIN-0004` (multiple plans per task) needs no schema change — multiple plans is multiple files — and `SABIN-0005` (CLI to attach a plan) becomes unnecessary, since the association is the directory rather than a frontmatter pointer. The cost: `SABIN-0005` is currently in `review`, so some work may be undone, and plans stop being listable in one flat directory.
 
-Recommendation: fold. `.sabin/research/` stays for genuinely cross-cutting documents. **This plan does not depend on the answer** — Phases 1 and 2 are unaffected either way. Phase 3 is.
+Resolved in favour of folding. `sabin notes new plan --template plan` writes into the ticket's notes
+directory, and the rewritten prompts point there. `.sabin/research/` stays for genuinely cross-cutting
+documents, and existing `.sabin/plans/` files are left alone.
+
+Consequences for the two open tickets, which have **not** been closed:
+- `SABIN-0004` (multiple plans per task) needs no schema change — multiple plans is multiple files.
+- `SABIN-0005` (CLI to attach a plan) is unnecessary — the association is the directory, not a
+  frontmatter pointer. It is sitting in `review`, so some work there may be superseded.
 
 **2. Does `.sabin` stay committed in personal projects?**
 
 Once several worktrees mutate a committed `.sabin`, every status change dirties the main clone's working tree and lands in whichever branch happens to commit it, scattering task history. Work projects avoid this because `.sabin` is external. Uniformity — always external, with `~/notes` as its own repo — solves it at the cost of losing task history next to the code it describes.
 
-**3. Ignore strategy for work repos.**
+**3. Ignore strategy for work repos. — RESOLVED.** `sabin init` writes `.git/info/exclude`.
 
 Recommendation: a global gitignore entry for yourself, plus `sabin link` writing `.git/info/exclude` per repo as a safety net. Neither is visible to other contributors, so the shared `.gitignore` stays untouched. Note that `git clean -fdx` only ever removes the two-line link file — the data lives outside the repo and is recreated by rerunning `sabin link`.
 

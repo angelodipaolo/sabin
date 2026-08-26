@@ -16,6 +16,18 @@ const PROMPTS_MAP: Record<string, string> = {
   'task-complete.md': 'sabin-task-complete'
 };
 
+function getSkillsDirectory(agent: string): string {
+  const homeDir = os.homedir();
+
+  switch (agent.toLowerCase()) {
+    case 'claude':
+    case 'claude-code':
+      return path.join(homeDir, '.claude', 'skills');
+    default:
+      throw new Error(`Unsupported agent: ${agent}. Currently only 'claude' is supported.`);
+  }
+}
+
 function getCommandsDirectory(agent: string): string {
   const homeDir = os.homedir();
 
@@ -33,12 +45,36 @@ function getCommandsDirectory(agent: string): string {
   }
 }
 
+function getPackageRoot(): string {
+  // Development:  packages/cli/dist/commands -> ../../../..
+  // Installed:    node_modules/@sabin/cli/dist/commands -> ../../../..
+  return path.join(__dirname, '..', '..', '..', '..');
+}
+
+/**
+ * The skill is what teaches an agent to resolve paths through the CLI instead
+ * of guessing, so it matters more than the slash commands
+ */
+async function installSkill(agent: string): Promise<string | null> {
+  const source = path.join(getPackageRoot(), 'skills', 'sabin', 'SKILL.md');
+  const destDir = path.join(getSkillsDirectory(agent), 'sabin');
+  const dest = path.join(destDir, 'SKILL.md');
+
+  try {
+    await fs.access(source);
+    await fs.mkdir(destDir, { recursive: true });
+    await fs.copyFile(source, dest);
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
 function getPromptsSourceDirectory(): string {
   // In development: packages/cli/dist/commands -> ../../../../prompts
   // In production (installed): node_modules/@sabin/cli/dist/commands -> ../../../../prompts
   // This works for both scenarios as prompts are at the monorepo root
-  const cliPackageRoot = path.join(__dirname, '..', '..', '..', '..');
-  return path.join(cliPackageRoot, 'prompts');
+  return path.join(getPackageRoot(), 'prompts');
 }
 
 export async function installPrompts(options: InstallPromptsOptions): Promise<void> {
@@ -76,6 +112,8 @@ export async function installPrompts(options: InstallPromptsOptions): Promise<vo
       }
     }
 
+    const skillPath = await installSkill(agent);
+
     if (failedCount === 0) {
       spinner.succeed(chalk.green(`Successfully installed ${installedCount} prompts for ${agent}`));
 
@@ -86,6 +124,14 @@ export async function installPrompts(options: InstallPromptsOptions): Promise<vo
 
       console.log(chalk.cyan('\nCommands installed to:'));
       console.log(chalk.cyan(`  ${commandsDir}`));
+
+      if (skillPath) {
+        console.log(chalk.gray('\nSkill installed:'));
+        console.log(chalk.gray(`  ${skillPath}`));
+        console.log(chalk.gray('  Teaches the agent to resolve notes paths through the CLI'));
+      } else {
+        console.log(chalk.yellow('\nCould not install the sabin skill - agents will not know where notes live.'));
+      }
 
       if (agent === 'claude') {
         console.log(chalk.yellow('\nNote: You may need to restart Claude Code for the commands to appear.'));
