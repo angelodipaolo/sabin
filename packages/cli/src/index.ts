@@ -11,6 +11,7 @@ import { where } from './commands/where';
 import { showTask } from './commands/show-task';
 import { startTask } from './commands/start';
 import { finishTask } from './commands/finish';
+import { runAgent } from './commands/run';
 import { notesNew } from './commands/notes';
 import { open } from './commands/open';
 import { draft } from './commands/draft';
@@ -57,6 +58,17 @@ program
   .option('--json', 'Output machine-readable JSON')
   .option('--no-worktree', 'Skip worktree and branch creation')
   .action(startTask);
+
+program
+  .command('run')
+  .description('Launch a coding agent on a ticket, prompted with the task')
+  .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
+  .option('-a, --agent <name>', 'Agent to launch (default: claude)')
+  .option('--claude', 'Shorthand for --agent claude')
+  .option('--codex', 'Shorthand for --agent codex')
+  .option('--print', 'Print the composed prompt and exit, without starting anything')
+  .option('--no-start', 'Do not create the worktree or change status first')
+  .action(runAgent);
 
 program
   .command('finish')
