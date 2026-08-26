@@ -11,8 +11,12 @@ import {
   getWorkingDirName,
   withLock,
   slugify,
+  slugFromTitle,
+  workspacePaths,
+  mainWorktreeRoot,
   Task
 } from '@sabin/core';
+import { ensureWorkspaceFiles } from '../workspace-scaffold';
 
 interface CreateTaskOptions {
   title?: string;
@@ -116,8 +120,21 @@ export async function createTask(options: CreateTaskOptions): Promise<void> {
     // Write task file
     await writeTask(task);
 
+    // Scaffold notes and scratchpad now, so drafting can start before the
+    // task does
+    const slug = task.slug ?? slugFromTitle(task.title, config);
+    const paths = workspacePaths(
+      { ticket: taskId, slug },
+      sabinDir,
+      await mainWorktreeRoot(projectRoot),
+      config
+    );
+    await ensureWorkspaceFiles(paths, task.title);
+
     spinner.succeed(chalk.green(`Created task: ${filename}`));
     console.log(chalk.gray(`Path: ${filePath}`));
+    console.log(chalk.gray(`Notes: ${paths.notesDir}`));
+    console.log(chalk.gray(`Prompt: ${paths.promptFile}`));
     // Bare ID on its own line so it can be piped into `sabin start`
     console.log(taskId);
     if (task.workingDir) {

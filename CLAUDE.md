@@ -168,6 +168,10 @@ Located in `packages/cli/src/`:
   - `--worktree`, `--notes`, `--prompt`, `--sabin` - open that part of a ticket instead
   - `-n, --new-window`, `-e, --editor <command>`
   - Editor precedence: `--editor`, `SABIN_EDITOR`, `editor` in `config.json`, then `code`
+- `sabin draft [ticket]` - Create a ticket's notes directory and prompt scratchpad **without starting work**
+  - Touches neither status nor the worktree, so you can think a task through before committing to it
+  - Creates the task if it does not exist, given a description or `--title`
+  - Opens the scratchpad in your editor; `--no-open` to skip
 - `sabin start <ticket>` - Create the worktree, branch, notes directory and prompt file. Idempotent.
   - Accepts a descriptive suffix: `sabin start JIRA-12345-update-telemetry`
   - Creates the task when it does not exist, provided a suffix or `--title` is given
@@ -194,6 +198,11 @@ Located in `packages/cli/src/`:
   - `--template plan`, `-t, --ticket <ticket>`
 - `sabin prompts install` - Install workflow prompts as slash commands
   - `-a, --agent <agent>` - Target agent (default: claude)
+
+**Lifecycle**: `task create` or `draft` scaffold the notes directory and scratchpad while the task is
+still `open`. `start` adds the worktree and branch and flips the status to `in_progress`. `finish`
+completes it and removes the worktree. Drafting is deliberately separate from starting, because a
+prompt gets written before there is anything to check out.
 
 **Ticket arguments are optional** and inferred from the current branch. Inference tries the configured
 `projectPrefix` first, then any uppercase JIRA-style key. A branch with no ticket is an **error, not a

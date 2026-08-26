@@ -149,6 +149,45 @@ function registerWorkspaceCommands(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.newNote', async () => {
+      const workspace = tree.focused();
+      if (!workspace) {
+        vscode.window.showWarningMessage('No task is focused.');
+        return;
+      }
+
+      const name = await vscode.window.showInputBox({
+        prompt: `New note in ${workspace.name}`,
+        placeHolder: 'research.md',
+        validateInput: value =>
+          value.trim().length === 0 ? 'Give the note a name' :
+          /[/\\]/.test(value) ? 'Notes cannot contain a path separator' :
+          undefined
+      });
+      if (!name) return;
+
+      const filename = name.trim().endsWith('.md') ? name.trim() : `${name.trim()}.md`;
+      const target = vscode.Uri.file(path.join(workspace.notesDir, filename));
+
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(workspace.notesDir));
+
+      // Never clobber an existing note - just open it
+      try {
+        await vscode.workspace.fs.stat(target);
+      } catch {
+        await vscode.workspace.fs.writeFile(
+          target,
+          Buffer.from(`# ${filename.replace(/\.md$/, '')}\n\n`)
+        );
+      }
+
+      const document = await vscode.workspace.openTextDocument(target);
+      await vscode.window.showTextDocument(document);
+      tree.refresh();
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('sabin.unpinTask', () => tree.unpin())
   );
 }

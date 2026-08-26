@@ -1,14 +1,12 @@
 import fs from 'fs/promises';
-import { spawn } from 'child_process';
-import chalk from 'chalk';
 import {
   resolveSabinDir,
-  readConfig,
   mainWorktreeRoot,
   codeWorkspacePath,
   writeCodeWorkspace
 } from '@sabin/core';
 import { getWorkspace, fail } from '../workspace-context';
+import { launchEditor } from '../editor';
 
 interface OpenOptions {
   worktree?: boolean;
@@ -42,7 +40,7 @@ export async function open(ticket: string | undefined, options: OpenOptions): Pr
     fail(`Nothing to open at ${target}` + (selected[0] === 'worktree' ? `\nRun: sabin start ${ticket ?? '<ticket>'}` : ''));
   }
 
-  await launch(target, options);
+  await launchEditor(target, options);
 }
 
 async function projectWorkspace(): Promise<string> {
@@ -70,51 +68,6 @@ async function ticketTarget(
     case 'prompt': return workspace.promptFile;
     case 'sabin': return workspace.sabinDir;
   }
-}
-
-/**
- * Editor precedence: flag, SABIN_EDITOR, config, then VS Code
- */
-async function resolveEditor(flag?: string): Promise<string> {
-  if (flag) return flag;
-  if (process.env.SABIN_EDITOR) return process.env.SABIN_EDITOR;
-
-  try {
-    const { sabinDir } = await resolveSabinDir();
-    const config = await readConfig(sabinDir) as { editor?: string };
-    if (config.editor) return config.editor;
-  } catch {
-    // Fall through to the default
-  }
-
-  return 'code';
-}
-
-async function launch(target: string, options: OpenOptions): Promise<void> {
-  const editor = await resolveEditor(options.editor);
-  const args = options.newWindow ? ['-n', target] : [target];
-
-  const child = spawn(editor, args, { detached: true, stdio: 'ignore' });
-
-  // Report only once the process actually started - an unresolvable editor
-  // fails asynchronously, and "Opening..." followed by an error reads badly
-  child.on('spawn', () => {
-    console.log(chalk.gray(`Opening ${target}`));
-    child.unref();
-  });
-
-  child.on('error', (error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') {
-      console.error(chalk.red(`Could not run "${editor}".`));
-      console.error(chalk.gray(
-        'Install the VS Code shell command (Shell Command: Install \'code\' command in PATH),\n' +
-        'or set a different editor with --editor, SABIN_EDITOR, or "editor" in config.json.'
-      ));
-    } else {
-      console.error(chalk.red(`Failed to open: ${error.message}`));
-    }
-    process.exit(1);
-  });
 }
 
 async function exists(target: string): Promise<boolean> {

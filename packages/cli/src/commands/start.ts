@@ -13,7 +13,6 @@ import {
   branchNameFor,
   parseTicketArg,
   slugify,
-  Task,
   addWorktree,
   listWorktrees,
   writeSabinLink,
@@ -21,6 +20,7 @@ import {
   Workspace
 } from '@sabin/core';
 import { fail } from '../workspace-context';
+import { ensureWorkspaceFiles, createTaskFile, exists } from '../workspace-scaffold';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,25 +30,6 @@ interface StartOptions {
   title?: string;
 }
 
-/**
- * Turn "update-telemetry" back into "Update telemetry" for a task title
- */
-function titleFromSlug(slug: string): string {
-  const words = slug.replace(/-/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-const PROMPT_TEMPLATE = (name: string, title: string) =>
-  `# ${name} - ${title}\n\n` +
-  `Scratchpad for prompts. Not visible to the agent.\n\n---\n\n`;
-
-/**
- * Create everything a ticket needs to be worked on: worktree, branch, notes
- * directory and prompt scratchpad.
- *
- * Idempotent - every path derives from the ticket ID, so running this twice
- * returns the existing workspace instead of erroring or creating a second one.
- */
 export async function startTask(ticketArg: string, options: StartOptions): Promise<void> {
   const { sabinDir } = await resolveSabinDir();
   const config = await readConfig(sabinDir);
@@ -110,18 +91,8 @@ export async function startTask(ticketArg: string, options: StartOptions): Promi
     await runPostCreate(config.worktrees?.postCreate ?? [], worktreeDir, created.includes(worktreeDir));
   }
 
-  // Notes directory
-  if (!(await exists(paths.notesDir))) {
-    await fs.mkdir(paths.notesDir, { recursive: true });
-    created.push(paths.notesDir);
-  }
-
-  // Prompt scratchpad
-  if (!(await exists(paths.promptFile))) {
-    await fs.mkdir(path.dirname(paths.promptFile), { recursive: true });
-    await fs.writeFile(paths.promptFile, PROMPT_TEMPLATE(paths.name, task.title));
-    created.push(paths.promptFile);
-  }
+  // Notes directory and prompt scratchpad, if drafting did not make them
+  await ensureWorkspaceFiles(paths, task.title, created);
 
   // Task state
   await withLock(sabinDir, async () => {
@@ -134,31 +105,6 @@ export async function startTask(ticketArg: string, options: StartOptions): Promi
   });
 
   report({ ...workspace, ...paths, taskFile, branch }, worktreeDir, created, options.json === true);
-}
-
-/**
- * Create the task file for a ticket that does not have one yet
- */
-async function createTaskFile(
-  sabinDir: string,
-  ticket: string,
-  slug: string | null,
-  title?: string
-): Promise<string> {
-  const tasksDir = path.join(sabinDir, 'tasks');
-  const openDir = path.join(tasksDir, 'open');
-  await fs.mkdir(openDir, { recursive: true });
-
-  const task: Task = {
-    status: 'open',
-    title: title ?? (slug ? titleFromSlug(slug) : ticket),
-    content: '',
-    path: path.join(openDir, `${ticket}.md`)
-  };
-  if (slug) task.slug = slug;
-
-  await withLock(sabinDir, () => writeTask(task));
-  return task.path;
 }
 
 async function ensureWorktree(
@@ -233,11 +179,3 @@ function report(
   console.log();
 }
 
-async function exists(target: string): Promise<boolean> {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-}

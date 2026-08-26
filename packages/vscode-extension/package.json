@@ -55,6 +55,11 @@
         "command": "sabin.openProjectWorkspace",
         "title": "Sabin: Reopen as Sabin Workspace",
         "icon": "$(window)"
+      },
+      {
+        "command": "sabin.newNote",
+        "title": "Sabin: New Note",
+        "icon": "$(new-file)"
       }
     ],
     "viewsContainers": {
@@ -81,6 +86,11 @@
     },
     "menus": {
       "view/title": [
+        {
+          "command": "sabin.newNote",
+          "when": "view == sabin.workspaceView",
+          "group": "navigation@0"
+        },
         {
           "command": "sabin.focusTask",
           "when": "view == sabin.workspaceView",
@@ -109,9 +119,14 @@
       ],
       "view/item/context": [
         {
+          "command": "sabin.newNote",
+          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
+          "group": "inline@1"
+        },
+        {
           "command": "sabin.openWorktree",
           "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "inline"
+          "group": "inline@2"
         }
       ]
     },

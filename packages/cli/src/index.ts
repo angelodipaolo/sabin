@@ -13,6 +13,7 @@ import { startTask } from './commands/start';
 import { finishTask } from './commands/finish';
 import { notesNew } from './commands/notes';
 import { open } from './commands/open';
+import { draft } from './commands/draft';
 
 const program = new Command();
 
@@ -37,6 +38,16 @@ program
   .description('Link to a shared .sabin directory')
   .argument('<path>', 'Path to shared .sabin directory')
   .action(linkToSharedSabin);
+
+program
+  .command('draft')
+  .description('Create a ticket\'s notes directory and prompt scratchpad, without starting work')
+  .argument('[ticket]', 'Ticket, optionally with a description (inferred from the branch if omitted)')
+  .option('-t, --title <title>', 'Task title, when creating the task')
+  .option('--no-open', 'Do not open the scratchpad in your editor')
+  .option('-e, --editor <command>', 'Editor command (default: code)')
+  .option('--json', 'Output machine-readable JSON')
+  .action(draft);
 
 program
   .command('start')
