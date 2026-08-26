@@ -54,17 +54,39 @@ you or the user might read later belongs here.
 Plans live in the ticket's notes directory, one file per plan. There is no
 `plan:` frontmatter field to maintain — the association is the directory.
 
+## Task lifecycle
+
+| Status | Meaning | Who sets it |
+| --- | --- | --- |
+| `open` | Requirements captured, not ready to implement | Whoever files it |
+| `ready` | Has enough detail or a plan to implement | You, once a plan exists |
+| `in_progress` | Work underway | You, or `sabin start` |
+| `review` | Work finished and committed, not yet verified | **You, when you finish** |
+| `completed` | Approved | **The user, never you** |
+
+`review` is your ceiling. When you finish a task, move it to `review` and say
+so — that is the end of your side of the exchange.
+
+**Only move a task to `completed` when the user has approved the work.** Your
+own tests passing is not approval. "Looks good", "ship it", "merge it" is. If
+you are unsure whether a message was approval, ask rather than closing it.
+
+Completing moves the task file from `tasks/open/` to `tasks/completed/`, which
+is a change git sees. Include that move in the commit that closes out the work,
+or commit it immediately after — a completed task left uncommitted reads as
+unfinished to everyone else.
+
 ## Changing task status
 
 Always through the CLI:
 
 ```bash
-sabin task update <TICKET> <status>    # open | ready | in_progress | review | completed
+sabin task update <TICKET> <status>
 ```
 
 Never edit `status` in frontmatter directly. Status lives in **both** the
-frontmatter and the containing directory (`tasks/open/` vs `tasks/completed/`),
-so a direct edit desynchronises them.
+frontmatter and the containing directory, so a direct edit desynchronises them
+and the file ends up in the wrong place.
 
 Read a task with `sabin task show` rather than guessing which directory holds it.
 

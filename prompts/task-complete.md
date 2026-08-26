@@ -1,6 +1,8 @@
 Resolve completed work.
 
-The user has verified the changes and is ready to commit.
+**Only run this when the user has approved the work.** Finishing a task and
+verifying it are different steps: you move a task to `review`, the user moves
+it to `completed`. Your own tests passing is not approval.
 
 ## Steps
 
@@ -21,7 +23,10 @@ sabin task update <TICKET> completed
    file if it is tracked in this repository. When the Sabin directory is shared
    and lives outside the repo, it is not part of the commit.
 
-4. **Leave the notes.** They are the record of how the work was done and stay
+4. **Commit the move.** A completed task whose file move is left uncommitted
+   reads as unfinished to everyone else.
+
+5. **Leave the notes.** They are the record of how the work was done and stay
    after the task closes.
 
 If the user also wants the worktree torn down, that is `sabin finish <TICKET>`
