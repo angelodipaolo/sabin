@@ -256,6 +256,13 @@ Uses Jest with ts-jest:
 
 ## Configuration
 
+**This repository manages its own tasks externally**: `.sabin` here is a link file pointing at
+`~/notes/sabin/.sabin`. A committed `.sabin` breaks under worktrees — a worktree checks out its own
+stale copy from HEAD and resolves to that, and status changes written from a worktree land in the main
+clone's working tree on whatever branch it has checked out. Run `sabin link <path>` to set this up in
+another project; it writes the link file, the workspace file, the `.git/info/exclude` entry and the
+prompts deny rule.
+
 The `.sabin/config.json` file stores project-level settings:
 ```json
 {
