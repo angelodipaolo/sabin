@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": ".sabin"
+    },
+    {
+      "path": "..",
+      "name": "sabin"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.lock": true
+    }
+  }
+}

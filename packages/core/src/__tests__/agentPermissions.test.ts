@@ -65,3 +65,41 @@ describe('denyPromptsAccess', () => {
     expect(await fs.readFile(settingsPath, 'utf8')).toBe('{ not valid json');
   });
 });
+
+describe('writeCodeWorkspace', () => {
+  const { writeCodeWorkspace } = jest.requireActual('../codeWorkspace');
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'sabin-cw-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('does not give both roots the same name in a repo called sabin', async () => {
+    const projectRoot = path.join(root, 'sabin');
+    const sabinDir = path.join(projectRoot, '.sabin');
+    await fs.mkdir(sabinDir, { recursive: true });
+
+    const target = await writeCodeWorkspace(sabinDir, projectRoot);
+    const { folders } = JSON.parse(await fs.readFile(target, 'utf8'));
+
+    expect(folders.map((f: any) => f.name)).toEqual(['.sabin', 'sabin']);
+    expect(new Set(folders.map((f: any) => f.name)).size).toBe(2);
+  });
+
+  it('points the second root at the project', async () => {
+    const projectRoot = path.join(root, 'myproject');
+    const sabinDir = path.join(root, 'notes', 'myproject', '.sabin');
+    await fs.mkdir(sabinDir, { recursive: true });
+    await fs.mkdir(projectRoot, { recursive: true });
+
+    const target = await writeCodeWorkspace(sabinDir, projectRoot);
+    const { folders } = JSON.parse(await fs.readFile(target, 'utf8'));
+
+    expect(folders[1].name).toBe('myproject');
+    expect(path.resolve(sabinDir, folders[1].path)).toBe(projectRoot);
+  });
+});

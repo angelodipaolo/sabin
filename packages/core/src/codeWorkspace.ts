@@ -21,7 +21,9 @@ export async function writeCodeWorkspace(
 
   const contents = {
     folders: [
-      { path: '.', name: 'sabin' },
+      // Named with the dot so it never collides with the project's own name,
+      // which it would in a repo that happens to be called "sabin"
+      { path: '.', name: '.sabin' },
       { path: relativeToProject, name }
     ],
     settings: {
