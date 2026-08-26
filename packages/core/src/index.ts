@@ -9,3 +9,4 @@ export * from './lock';
 export * from './workspace';
 export * from './codeWorkspace';
 export * from './agentPermissions';
+export * from './gitExclude';

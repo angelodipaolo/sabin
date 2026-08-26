@@ -3,7 +3,14 @@ import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { confirm } from '@inquirer/prompts';
-import { writeSabinLink, writeCodeWorkspace, checkSabinType } from '@sabin/core';
+import {
+  writeSabinLink,
+  writeCodeWorkspace,
+  denyPromptsAccess,
+  addGitExclude,
+  readConfig,
+  checkSabinType
+} from '@sabin/core';
 
 export async function linkToSharedSabin(targetPath: string): Promise<void> {
   const spinner = ora('Linking to shared .sabin...').start();
@@ -61,10 +68,19 @@ export async function linkToSharedSabin(targetPath: string): Promise<void> {
     await writeSabinLink(projectRoot, resolvedTarget);
     const codeWorkspace = await writeCodeWorkspace(resolvedTarget, projectRoot);
 
+    // Same setup `sabin init --shared` performs: ignore the link locally and
+    // deny agents the prompt scratchpads
+    const excluded = await addGitExclude(projectRoot);
+    const config = await readConfig(resolvedTarget);
+    const promptsDir = path.resolve(resolvedTarget, config.promptsDir ?? 'prompts');
+    const denied = await denyPromptsAccess(projectRoot, promptsDir);
+
     spinner.succeed(chalk.green('Successfully linked to shared .sabin'));
     console.log(chalk.gray(`Target: ${resolvedTarget}`));
     console.log(chalk.gray(`Link file: ${path.join(projectRoot, '.sabin')}`));
     console.log(chalk.gray(`Workspace: ${codeWorkspace}`));
+    console.log(chalk.gray(`Locally ignored: ${excluded ? '.git/info/exclude' : 'no - add .sabin to your ignores'}`));
+    console.log(chalk.gray(`Prompts denied: ${path.relative(projectRoot, denied.path)}`));
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to link to shared .sabin'));
     console.error(chalk.red(error.message));

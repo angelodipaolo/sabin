@@ -88,8 +88,6 @@ desktop.ini
 # Notes
 .notes
 
-# Prompt scratchpads are personal, even when .sabin is committed
-.sabin/prompts/
-
-# Generated, and VS Code rewrites it on every task switch
-.sabin/*.code-workspace
+# Sabin data lives outside the repo (~/notes/sabin/.sabin); only a link file
+# sits here, and it is machine-specific
+.sabin
