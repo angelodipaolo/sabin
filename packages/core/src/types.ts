@@ -34,12 +34,29 @@ export interface SlugConfig {
   stopWords?: boolean;
 }
 
+export interface AgentDefinition {
+  /** Executable to spawn, e.g. "codex" */
+  command: string;
+  /** Argv template. Supports {prompt}, {ticket}, {notesDir}, {worktree}, {taskFile}. */
+  args?: string[];
+  /** Extra environment for the agent process */
+  env?: Record<string, string>;
+}
+
+export interface AgentsConfig {
+  /** Agent launched when --agent is not given */
+  default?: string;
+  /** Named agents, layered over the built-ins */
+  definitions?: Record<string, AgentDefinition>;
+}
+
 export interface SabinConfig {
   projectPrefix: string;
   taskNumberPadding: number;
   branch?: BranchConfig;
   worktrees?: WorktreeConfig;
   slug?: SlugConfig;
+  agents?: AgentsConfig;
   /** Relative to the resolved .sabin directory */
   notesDir?: string;
   /** Relative to the resolved .sabin directory */

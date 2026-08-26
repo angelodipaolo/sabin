@@ -223,6 +223,27 @@ The configuration file (`.sabin/config.json`) has the following structure:
 - Default: `TASK-0001`, `TASK-0002`, etc.
 - Custom: `MYPROJECT-0001`, `MYPROJECT-0002`, etc.
 
+### Coding Agents
+
+`sabin run <ticket>` launches a coding agent already prompted with the task. `claude` and
+`codex` work out of the box; anything else is a few lines of config:
+
+```json
+{
+  "agents": {
+    "default": "claude",
+    "definitions": {
+      "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
+      "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
+    }
+  }
+}
+```
+
+Each argument may contain `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` or `{taskFile}`.
+A definition that never mentions `{prompt}` gets it appended as the final argument, so
+`{ "command": "aider" }` on its own does the obvious thing.
+
 ### External Task IDs
 
 You can link tasks from external systems (JIRA, Linear, Notion, etc.) by providing custom task IDs:
@@ -265,6 +286,12 @@ sabin task list -s open
 
 # Update task status
 sabin task update TASK-0001 ready
+
+# Kick off an agent on a task: worktree, branch, status and prompt in one command
+sabin run TASK-0001                  # Default agent (claude)
+sabin run TASK-0001 --codex          # Or codex
+sabin run TASK-0001 -a aider         # Or anything configured
+sabin run TASK-0001 --print          # Just show the prompt, change nothing
 ```
 
 ## License
