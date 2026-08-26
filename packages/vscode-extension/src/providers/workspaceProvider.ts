@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
 
-type NodeKind = 'focused' | 'prompt' | 'note' | 'notesEmpty' | 'group' | 'task' | 'empty';
+type NodeKind = 'focused' | 'prompt' | 'note' | 'notesDir' | 'notesEmpty' | 'group' | 'task' | 'empty';
 
 export class WorkspaceNode extends vscode.TreeItem {
   constructor(
@@ -86,6 +86,10 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
 
     if (element.kind === 'group') {
       return this.taskNodes(element.label as string);
+    }
+
+    if (element.kind === 'notesDir' && element.filePath) {
+      return this.directoryChildren(element.filePath);
     }
 
     return [];
@@ -180,16 +184,15 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
       empty.iconPath = new vscode.ThemeIcon('note');
       nodes.push(empty);
     } else {
-      for (const note of notes) {
-        const filePath = path.join(workspace.notesDir, note);
-        const item = new WorkspaceNode(note, 'note', vscode.TreeItemCollapsibleState.None, workspace, filePath);
-        item.iconPath = new vscode.ThemeIcon('markdown');
-        item.command = openFile(filePath);
-        nodes.push(item);
-      }
+      nodes.push(...notes.map(entry => entryNode(workspace, path.join(workspace.notesDir, entry.name), entry.isDirectory)));
     }
 
     return nodes;
+  }
+
+  private async directoryChildren(dir: string): Promise<WorkspaceNode[]> {
+    const entries = await this.service.listDirectory(dir);
+    return entries.map(entry => entryNode(undefined, path.join(dir, entry.name), entry.isDirectory));
   }
 
   private taskNodes(groupLabel: string): WorkspaceNode[] {
@@ -218,6 +221,35 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
         return node;
       });
   }
+}
+
+/**
+ * Notes can be any text an agent reads - JSON, YAML, CSV, logs - so let the
+ * user's file icon theme pick the icon rather than assuming markdown
+ */
+function entryNode(
+  workspace: TaskWorkspace | undefined,
+  filePath: string,
+  isDirectory: boolean
+): WorkspaceNode {
+  const node = new WorkspaceNode(
+    path.basename(filePath),
+    isDirectory ? 'notesDir' : 'note',
+    isDirectory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+    workspace,
+    filePath
+  );
+
+  node.resourceUri = vscode.Uri.file(filePath);
+
+  if (isDirectory) {
+    node.iconPath = vscode.ThemeIcon.Folder;
+  } else {
+    node.iconPath = vscode.ThemeIcon.File;
+    node.command = openFile(filePath);
+  }
+
+  return node;
 }
 
 function openFile(filePath: string): vscode.Command {

@@ -135,7 +135,7 @@ const notes = program
 notes
   .command('new')
   .description('Scaffold a note in the ticket notes directory and print its path')
-  .argument('<name>', 'Note filename, e.g. plan or research.md')
+  .argument('<name>', 'Note filename, e.g. research, schema.json, data.csv (defaults to .md)')
   .option('--template <template>', 'Seed from a template (plan)')
   .option('-t, --ticket <ticket>', 'Override branch inference')
   .action(notesNew);

@@ -54,10 +54,17 @@ export async function showContext(options: ContextOptions): Promise<void> {
   console.log();
 }
 
+/**
+ * Notes are any context the agent might read - JSON, YAML, CSV, logs - so
+ * nothing is filtered by extension. Directories carry a trailing slash.
+ */
 async function listNotes(notesDir: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(notesDir, { withFileTypes: true });
-    return entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name).sort();
+    return entries
+      .filter(entry => !entry.name.startsWith('.'))
+      .map(entry => entry.isDirectory() ? `${entry.name}/` : entry.name)
+      .sort();
   } catch {
     return [];
   }

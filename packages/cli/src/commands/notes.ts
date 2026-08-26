@@ -26,6 +26,34 @@ const PLAN_TEMPLATE = `# Implementation Plan: {title}
 `;
 
 /**
+ * Seed content for a new note.
+ *
+ * Notes hold any context an agent might read - JSON, YAML, CSV, logs - so
+ * only formats with an obvious empty form get seeded. Everything else starts
+ * empty rather than with a guess at its syntax.
+ */
+function seedFor(filename: string): string {
+  switch (path.extname(filename).toLowerCase()) {
+    case '.md':
+    case '.markdown':
+      return `# ${path.basename(filename, path.extname(filename))}\n\n`;
+    case '.json':
+      return '{}\n';
+    default:
+      return '';
+  }
+}
+
+/**
+ * Give a bare name the default extension, but never override one the user
+ * already chose
+ */
+export function noteFilename(name: string): string {
+  const trimmed = name.trim();
+  return path.extname(trimmed) ? trimmed : `${trimmed}.md`;
+}
+
+/**
  * Scaffold a note in the ticket's notes directory and print its path.
  *
  * Deliberately the only notes command - reading, listing and editing notes
@@ -34,10 +62,10 @@ const PLAN_TEMPLATE = `# Implementation Plan: {title}
 export async function notesNew(name: string, options: NotesNewOptions): Promise<void> {
   const { workspace } = await getWorkspace(options.ticket);
 
-  const filename = name.endsWith('.md') ? name : `${name}.md`;
+  const filename = noteFilename(name);
   const target = path.join(workspace.notesDir, filename);
 
-  await fs.mkdir(workspace.notesDir, { recursive: true });
+  await fs.mkdir(path.dirname(target), { recursive: true });
 
   try {
     await fs.access(target);
@@ -48,8 +76,8 @@ export async function notesNew(name: string, options: NotesNewOptions): Promise<
   }
 
   const body = options.template === 'plan'
-    ? PLAN_TEMPLATE.replace('{title}', `${workspace.ticket}`)
-    : `# ${filename.replace(/\.md$/, '')}\n`;
+    ? PLAN_TEMPLATE.replace('{title}', workspace.ticket)
+    : seedFor(filename);
 
   await fs.writeFile(target, body);
   console.error(chalk.green(`Created ${filename} in ${workspace.ticket} notes`));

@@ -195,6 +195,9 @@ Located in `packages/cli/src/`:
   - `--json`
 - `sabin task show [id]` - Print a task file
 - `sabin notes new <name>` - Scaffold a note in the ticket notes directory and print its path
+  - Notes are **any** context an agent might read - `.json`, `.yaml`, `.csv`, `.log`, plain text
+  - An extension you supply is kept; a bare name defaults to `.md`
+  - Only markdown and JSON get seed content; other formats start empty rather than guessing syntax
   - `--template plan`, `-t, --ticket <ticket>`
 - `sabin prompts install` - Install workflow prompts as slash commands
   - `-a, --agent <agent>` - Target agent (default: claude)

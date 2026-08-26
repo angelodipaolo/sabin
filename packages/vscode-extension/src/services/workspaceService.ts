@@ -16,6 +16,11 @@ import {
   SabinConfig
 } from '@sabin/core';
 
+export interface NoteEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
 export interface TaskWorkspace {
   ticket: string;
   name: string;
@@ -105,13 +110,25 @@ export class WorkspaceService {
     return workspaces;
   }
 
-  public async notesFor(workspace: TaskWorkspace): Promise<string[]> {
+  public async notesFor(workspace: TaskWorkspace): Promise<NoteEntry[]> {
+    return this.listDirectory(workspace.notesDir);
+  }
+
+  /**
+   * Notes are any context an agent might read, so nothing is filtered by
+   * extension - only dotfiles are hidden. Directories sort first.
+   */
+  public async listDirectory(dir: string): Promise<NoteEntry[]> {
     try {
-      const entries = await fs.readdir(workspace.notesDir, { withFileTypes: true });
+      const entries = await fs.readdir(dir, { withFileTypes: true });
       return entries
-        .filter(entry => entry.isFile() && !entry.name.startsWith('.'))
-        .map(entry => entry.name)
-        .sort();
+        .filter(entry => !entry.name.startsWith('.'))
+        .map(entry => ({ name: entry.name, isDirectory: entry.isDirectory() }))
+        .sort((a, b) =>
+          a.isDirectory === b.isDirectory
+            ? a.name.localeCompare(b.name)
+            : a.isDirectory ? -1 : 1
+        );
     } catch {
       return [];
     }

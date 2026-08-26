@@ -6,6 +6,7 @@ import { TaskService } from './services/taskService';
 import { WorkspaceService } from './services/workspaceService';
 import { WorkspaceTreeProvider } from './providers/workspaceProvider';
 import { focusFolders } from './services/workspaceFolders';
+import { noteFilename, seedFor } from './services/noteFiles';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Sabin extension is now active!');
@@ -158,7 +159,7 @@ function registerWorkspaceCommands(
 
       const name = await vscode.window.showInputBox({
         prompt: `New note in ${workspace.name}`,
-        placeHolder: 'research.md',
+        placeHolder: 'research, schema.json, data.csv',
         validateInput: value =>
           value.trim().length === 0 ? 'Give the note a name' :
           /[/\\]/.test(value) ? 'Notes cannot contain a path separator' :
@@ -166,7 +167,7 @@ function registerWorkspaceCommands(
       });
       if (!name) return;
 
-      const filename = name.trim().endsWith('.md') ? name.trim() : `${name.trim()}.md`;
+      const filename = noteFilename(name);
       const target = vscode.Uri.file(path.join(workspace.notesDir, filename));
 
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(workspace.notesDir));
@@ -175,10 +176,7 @@ function registerWorkspaceCommands(
       try {
         await vscode.workspace.fs.stat(target);
       } catch {
-        await vscode.workspace.fs.writeFile(
-          target,
-          Buffer.from(`# ${filename.replace(/\.md$/, '')}\n\n`)
-        );
+        await vscode.workspace.fs.writeFile(target, Buffer.from(seedFor(filename)));
       }
 
       const document = await vscode.workspace.openTextDocument(target);
