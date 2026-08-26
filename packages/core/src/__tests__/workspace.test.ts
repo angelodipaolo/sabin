@@ -7,13 +7,13 @@ import {
   branchNameFor,
   workspacePaths,
   defaultWorktreeRoot,
-  findTaskFile,
   parseTicketArg,
   workspaceName,
   slugFromBranch,
   findWorkspaceDir,
   slugFromTitle
 } from '../workspace';
+import { findTaskFile } from '../tasks';
 import { SabinConfig } from '../types';
 
 const config: SabinConfig = {

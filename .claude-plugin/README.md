@@ -1,47 +1,42 @@
 # Sabin Claude Code Plugin
 
-File-based workflow management for agentic coding.
+Ships the `sabin` skill: the workflow contract an agent follows in a Sabin
+project (orient, notes, plan, implement, review, complete).
 
 ## Prerequisites
 
-**IMPORTANT**: The Sabin CLI must be installed before using this plugin.
+The Sabin CLI must be on your PATH - the skill drives everything through it.
 
-Install the CLI:
 ```bash
-cd packages/cli
-npm link
-```
-
-Verify installation:
-```bash
+cd packages/cli && npm link
 sabin --version
 ```
 
 ## Installation
 
-From the Sabin repository root:
+From the Sabin repository root, in Claude Code:
 
-```bash
-# In Claude Code, add the local marketplace
+```
 /plugin marketplace add /absolute/path/to/sabin
-
-# Install the plugin
 /plugin install sabin@sabin-local
 ```
 
-## Available Commands
+Or, without the plugin system, `sabin skill install` copies the same skill to
+`~/.claude/skills/sabin`.
 
-- `/sabin-create` - Create a detailed task from high-level requirements
-- `/sabin-plan` - Create an implementation plan for a task
-- `/sabin-implement` - Implement a task based on its plan
-- `/sabin-complete` - Complete and commit a task
+## Usage
 
-## How It Works
+The skill is invoked as `/sabin <what>` or picked up implicitly in any repo
+with a `.sabin` link:
 
-The plugin provides slash commands that invoke the Sabin CLI via bash commands. All task management happens through the CLI, which operates on the `.sabin/` directory in your workspace.
+- `/sabin create` - expand a rough idea into a task
+- `/sabin plan` - write the ticket's plan
+- `/sabin implement` - do the work, end in `review`
+- `/sabin review` - review the diff against the acceptance criteria
+- `/sabin complete` - approve: mark completed and follow the project's hook
 
 ## Uninstallation
 
-```bash
+```
 /plugin uninstall sabin@sabin-local
 ```

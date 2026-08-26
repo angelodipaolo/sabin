@@ -3,16 +3,24 @@ import * as fs from 'fs/promises';
 import {
   resolveSabinDir,
   readConfig,
-  parseTask,
+  listTasks,
+  createTask,
+  setTaskStatus,
+  findTaskFile,
+  findPlan,
+  nextTaskId,
   currentBranch,
   mainWorktreeRoot,
   ticketFromBranch,
   workspacePaths,
-  WorkspacePaths,
+  scaffoldWorkspace,
   slugForTicket,
+  slugFromTitle,
   codeWorkspacePath,
   writeCodeWorkspace,
-  SabinConfig
+  SabinConfig,
+  TaskStatus,
+  WorkspacePaths
 } from '@sabin/core';
 
 export interface NoteEntry {
@@ -24,24 +32,25 @@ export interface TaskWorkspace {
   ticket: string;
   name: string;
   title: string;
-  status: string;
+  status: TaskStatus;
   slug: string | null;
   taskFile: string;
   notesDir: string;
   promptFile: string;
   worktreeDir: string;
   branch: string | null;
+  /** Absolute path to plan.md, when it exists */
+  planPath: string | null;
 }
 
 /**
- * Resolves the workspace behind each task: its notes directory, prompt
- * scratchpad, worktree and branch.
- *
- * Kept separate from TaskService, which owns the board's view of tasks.
+ * The extension's one door into Sabin data. Everything goes through core, so
+ * the board, the tree and the CLI can never disagree about where a ticket's
+ * files are or how a status change is written.
  */
 export class WorkspaceService {
   private sabinDir: string | null = null;
-  private mainRoot: string | null = null;
+  private mainRoot: string | null | undefined;
   private config: SabinConfig | null = null;
 
   constructor(private workspaceRoot: string) {}
@@ -50,7 +59,7 @@ export class WorkspaceService {
    * Ticket for the branch currently checked out, if any.
    *
    * Checks every workspace folder, so the focused task still resolves when
-   * the window is rooted on .sabin and a worktree sits alongside it.
+   * the window is rooted on the Sabin directory and a worktree sits alongside.
    */
   public async currentTicket(searchRoots: string[]): Promise<string | null> {
     const config = await this.getConfig();
@@ -66,45 +75,84 @@ export class WorkspaceService {
     return null;
   }
 
-  /**
-   * Every task that has a workspace, newest status first
-   */
   public async listWorkspaces(): Promise<TaskWorkspace[]> {
     const sabinDir = await this.getSabinDir();
-    const tasksDir = path.join(sabinDir, 'tasks');
-
     const workspaces: TaskWorkspace[] = [];
 
-    for (const statusDir of await subdirectories(tasksDir)) {
-      const dir = path.join(tasksDir, statusDir);
-
-      for (const file of await markdownFiles(dir)) {
-        const taskFile = path.join(dir, file);
-
-        try {
-          const task = await parseTask(taskFile);
-          const ticket = path.basename(file, '.md');
-          const paths = await this.pathsFor(ticket, task.slug, task.title);
-
-          workspaces.push({
-            ticket,
-            name: paths.name,
-            title: task.title ?? ticket,
-            status: task.status ?? 'open',
-            slug: paths.slug,
-            taskFile,
-            notesDir: paths.notesDir,
-            promptFile: paths.promptFile,
-            worktreeDir: task.worktree ?? paths.worktreeDir,
-            branch: task.branch ?? null
-          });
-        } catch {
-          // A malformed task file should not blank the whole view
-        }
-      }
+    for (const task of await listTasks(sabinDir)) {
+      const paths = await this.pathsFor(task.id, task.slug, task.title);
+      workspaces.push({
+        ticket: task.id,
+        name: paths.name,
+        title: task.title,
+        status: task.status,
+        slug: paths.slug,
+        taskFile: task.path,
+        notesDir: paths.notesDir,
+        promptFile: paths.promptFile,
+        worktreeDir: task.worktree ?? paths.worktreeDir,
+        branch: task.branch ?? null,
+        planPath: await findPlan(paths.notesDir)
+      });
     }
 
     return workspaces;
+  }
+
+  public async find(ticket: string): Promise<TaskWorkspace | undefined> {
+    return (await this.listWorkspaces()).find(w => w.ticket === ticket);
+  }
+
+  public async nextTaskId(): Promise<string> {
+    return nextTaskId(await this.getSabinDir(), await this.getConfig());
+  }
+
+  /**
+   * Create a task with its notes directory and prompt scratchpad, exactly as
+   * `sabin task create` does
+   */
+  public async createTask(title: string, id?: string): Promise<TaskWorkspace> {
+    const sabinDir = await this.getSabinDir();
+    const config = await this.getConfig();
+
+    const task = await createTask(sabinDir, config, { title, id });
+    const paths = await this.pathsFor(task.id, task.slug, task.title);
+    await scaffoldWorkspace(paths, task.title);
+
+    return {
+      ticket: task.id,
+      name: paths.name,
+      title: task.title,
+      status: task.status,
+      slug: paths.slug,
+      taskFile: task.path,
+      notesDir: paths.notesDir,
+      promptFile: paths.promptFile,
+      worktreeDir: paths.worktreeDir,
+      branch: null,
+      planPath: null
+    };
+  }
+
+  public async setStatus(ticket: string, status: TaskStatus): Promise<void> {
+    await setTaskStatus(await this.getSabinDir(), ticket, status);
+  }
+
+  /**
+   * Remove the task file only. Notes stay - they may be the only record of
+   * why the task was dropped.
+   */
+  public async deleteTask(ticket: string): Promise<void> {
+    const file = await findTaskFile(await this.getSabinDir(), ticket);
+    if (file) await fs.unlink(file);
+  }
+
+  /**
+   * Make sure a ticket's notes directory and scratchpad exist before opening
+   * them - both are derived paths, created lazily
+   */
+  public async ensureFiles(workspace: TaskWorkspace): Promise<void> {
+    await scaffoldWorkspace(workspace, workspace.title);
   }
 
   public async notesFor(workspace: TaskWorkspace): Promise<NoteEntry[]> {
@@ -132,10 +180,8 @@ export class WorkspaceService {
   }
 
   /**
-   * Every path belonging to a ticket, given a task we have already parsed.
-   *
-   * Shares core's slug precedence so the extension and `sabin where` never
-   * disagree about where a ticket's notes live.
+   * Every path belonging to a ticket. Shares core's slug precedence so the
+   * extension and `sabin where` never disagree about where notes live.
    */
   public async pathsFor(
     ticket: string,
@@ -144,7 +190,8 @@ export class WorkspaceService {
   ): Promise<WorkspacePaths> {
     const sabinDir = await this.getSabinDir();
     const config = await this.getConfig();
-    const slug = await slugForTicket(ticket, recordedSlug, title, sabinDir, config);
+    const slug = (await slugForTicket(ticket, recordedSlug, title, sabinDir, config))
+      ?? slugFromTitle(title, config);
 
     return workspacePaths({ ticket, slug }, sabinDir, await this.getMainRoot(), config);
   }
@@ -152,8 +199,8 @@ export class WorkspaceService {
   /**
    * The project's .code-workspace file, generating it if absent.
    *
-   * When the window is rooted on .sabin itself there is no main clone to name
-   * it after, so fall back to whichever workspace file is already there.
+   * When the window is rooted on the Sabin directory itself there is no main
+   * clone to name it after, so fall back to whichever workspace file is there.
    */
   public async getCodeWorkspacePath(): Promise<string | null> {
     const sabinDir = await this.getSabinDir();
@@ -192,7 +239,7 @@ export class WorkspaceService {
   }
 
   private async getMainRoot(): Promise<string | null> {
-    if (this.mainRoot === null) {
+    if (this.mainRoot === undefined) {
       this.mainRoot = await mainWorktreeRoot(this.workspaceRoot);
     }
     return this.mainRoot;
@@ -200,23 +247,5 @@ export class WorkspaceService {
 
   public invalidate(): void {
     this.config = null;
-  }
-}
-
-async function subdirectories(dir: string): Promise<string[]> {
-  try {
-    return (await fs.readdir(dir, { withFileTypes: true }))
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name);
-  } catch {
-    return [];
-  }
-}
-
-async function markdownFiles(dir: string): Promise<string[]> {
-  try {
-    return (await fs.readdir(dir)).filter(file => file.endsWith('.md'));
-  } catch {
-    return [];
   }
 }

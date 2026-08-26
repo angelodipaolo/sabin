@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import chalk from 'chalk';
-import { parseTask } from '@sabin/core';
+import { parseTask, pathExists, findPlan, ticketFromBranch } from '@sabin/core';
 import { getWorkspace } from '../workspace-context';
 
 interface ContextOptions {
@@ -18,11 +18,17 @@ interface ContextOptions {
  * it, since that is for you.
  */
 export async function showContext(options: ContextOptions): Promise<void> {
-  const { workspace } = await getWorkspace(options.ticket);
+  const { workspace, config } = await getWorkspace(options.ticket);
 
   const task = workspace.taskFile ? await parseTask(workspace.taskFile) : null;
+
+  // The checked-out branch only counts when it is this ticket's - with an
+  // explicit ticket, the current branch may belong to something else
+  const onTicketBranch = workspace.branch !== null && ticketFromBranch(workspace.branch, config) === workspace.ticket;
+  const branch = task?.branch ?? (onTicketBranch ? workspace.branch : null);
   const notes = await listNotes(workspace.notesDir);
-  const worktreeExists = await exists(workspace.worktreeDir);
+  const worktreeExists = await pathExists(workspace.worktreeDir);
+  const plan = await findPlan(workspace.notesDir);
 
   if (options.json) {
     console.log(JSON.stringify({
@@ -31,11 +37,12 @@ export async function showContext(options: ContextOptions): Promise<void> {
       slug: workspace.slug,
       title: task?.title ?? null,
       status: task?.status ?? null,
-      branch: workspace.branch,
+      branch,
       worktree: worktreeExists ? workspace.worktreeDir : null,
       sabinDir: workspace.sabinDir,
       notesDir: workspace.notesDir,
       taskFile: workspace.taskFile,
+      plan,
       notes
     }, null, 2));
     return;
@@ -43,10 +50,11 @@ export async function showContext(options: ContextOptions): Promise<void> {
 
   console.log(`\n${chalk.bold(workspace.name)}${task ? ` ${chalk.gray('·')} ${task.title}` : ''}`);
   if (task) console.log(`  ${chalk.gray('Status:')}   ${task.status}`);
-  console.log(`  ${chalk.gray('Branch:')}   ${workspace.branch ?? chalk.yellow('(detached)')}`);
+  console.log(`  ${chalk.gray('Branch:')}   ${branch ?? chalk.yellow('(none yet)')}`);
   console.log(`  ${chalk.gray('Worktree:')} ${worktreeExists ? workspace.worktreeDir : chalk.yellow('(not created)')}`);
   console.log(`  ${chalk.gray('Task:')}     ${workspace.taskFile ?? chalk.yellow('(no task file)')}`);
   console.log(`  ${chalk.gray('Notes:')}    ${chalk.cyan(workspace.notesDir)}`);
+  console.log(`  ${chalk.gray('Plan:')}     ${plan ?? chalk.yellow('(none)')}`);
   console.log(`  ${chalk.gray('Prompt:')}   ${workspace.promptFile}`);
 
   if (notes.length > 0) {
@@ -72,12 +80,4 @@ async function listNotes(notesDir: string): Promise<string[]> {
   }
 }
 
-async function exists(target: string): Promise<boolean> {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
 

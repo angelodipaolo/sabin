@@ -2,194 +2,190 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { SabinWebviewProvider } from './providers/webviewProvider';
 import { SabinFileWatcher } from './watchers/fileWatcher';
-import { TaskService } from './services/taskService';
-import { WorkspaceService } from './services/workspaceService';
+import { WorkspaceService, TaskWorkspace } from './services/workspaceService';
 import { WorkspaceTreeProvider } from './providers/workspaceProvider';
 import { focusFolders } from './services/workspaceFolders';
 import { noteFilename, seedFor } from './services/noteFiles';
 
-export function activate(context: vscode.ExtensionContext) {
-  console.log('Sabin extension is now active!');
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) return;
 
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-  if (!workspaceRoot) {
-    vscode.window.showErrorMessage('No workspace folder open');
+  const service = new WorkspaceService(workspaceRoot);
+
+  // Not a Sabin project: stay quiet rather than nag every window
+  let sabinDir: string;
+  try {
+    sabinDir = await service.getSabinDir();
+  } catch {
     return;
   }
 
-  // Initialize shared services. The board resolves each ticket's plan through
-  // the workspace service, so it has to be wired up before the first render.
-  const workspaceService = new WorkspaceService(workspaceRoot);
-  const taskService = TaskService.getInstance(workspaceRoot);
-  taskService.setWorkspaceService(workspaceService);
-
-  const provider = new SabinWebviewProvider(context.extensionUri, taskService);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      'sabin.tasksView',
-      provider
-    )
-  );
-
-  // Workspace view: the focused task's own files, above the board
-  const workspaceTree = new WorkspaceTreeProvider(workspaceService);
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('sabin.workspaceView', workspaceTree)
-  );
-
-  const fileWatcher = new SabinFileWatcher(() => {
-    provider.refresh();
-    workspaceTree.refresh();
-  });
-  context.subscriptions.push(fileWatcher);
-
-  // Focus follows the branch, so a checkout in any root updates the view
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceTree.refresh())
-  );
-
-  registerWorkspaceCommands(context, workspaceService, workspaceTree);
+  const board = new SabinWebviewProvider(context.extensionUri, service);
+  const tree = new WorkspaceTreeProvider(service);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.newTask', async () => {
-      console.log('[Sabin Debug] extension - sabin.newTask command invoked');
-      try {
-        await createNewTask(taskService);
-        // Small delay to ensure file operations complete
-        await new Promise(resolve => setTimeout(resolve, 200));
-        provider.refresh();
-        console.log('[Sabin Debug] extension - task creation completed successfully');
-      } catch (error) {
-        console.error('[Sabin Debug] extension - Error in sabin.newTask:', error);
-        vscode.window.showErrorMessage(`Failed to create task: ${error}`);
-      }
-    })
+    vscode.window.registerWebviewViewProvider(SabinWebviewProvider.viewType, board),
+    vscode.window.registerTreeDataProvider('sabin.workspaceView', tree)
   );
 
+  const refresh = () => {
+    board.refresh();
+    tree.refresh();
+  };
+
   context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.refreshTasks', () => {
-      provider.refresh();
-      workspaceService.invalidate();
-      workspaceTree.refresh();
-    })
+    new SabinFileWatcher(sabinDir, refresh),
+    // Focus follows the branch, so a checkout in any root updates the view
+    vscode.workspace.onDidChangeWorkspaceFolders(() => tree.refresh())
   );
+
+  registerCommands(context, service, tree, refresh);
 }
 
-function registerWorkspaceCommands(
+function registerCommands(
   context: vscode.ExtensionContext,
   service: WorkspaceService,
-  tree: WorkspaceTreeProvider
-) {
+  tree: WorkspaceTreeProvider,
+  refresh: () => void
+): void {
   // Focusing still works without folder swapping, so nag once per session
   // rather than on every click
   let warnedAboutPlainWindow = false;
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.focusTask', async (ticket?: string) => {
-      const target = ticket ?? await pickTicket(service);
-      if (!target) return;
+  const focusedOrWarn = (): TaskWorkspace | undefined => {
+    const workspace = tree.focused();
+    if (!workspace) vscode.window.showWarningMessage('No task is focused.');
+    return workspace;
+  };
 
-      await tree.focus(target);
-
-      const workspace = tree.find(target);
-      if (!workspace) return;
-
-      if (focusFolders(workspace) === 'unsupported' && !warnedAboutPlainWindow) {
-        warnedAboutPlainWindow = true;
-        void offerProjectWorkspace(service);
-      }
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.openProjectWorkspace', async () => {
-      const target = await service.getCodeWorkspacePath();
-      if (!target) {
-        vscode.window.showWarningMessage('No Sabin workspace file found. Run `sabin link` in the project.');
-        return;
-      }
-
-      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target));
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.openPrompt', async () => {
-      const workspace = tree.focused();
-      if (!workspace) {
-        vscode.window.showWarningMessage('No task is focused.');
-        return;
-      }
-
-      // The scratchpad is created lazily, so an unstarted task has none yet
+  const register = (command: string, handler: (...args: any[]) => Promise<void> | void) =>
+    context.subscriptions.push(vscode.commands.registerCommand(command, async (...args) => {
       try {
-        await vscode.workspace.fs.stat(vscode.Uri.file(workspace.promptFile));
-      } catch {
-        const dir = vscode.Uri.file(path.dirname(workspace.promptFile));
-        await vscode.workspace.fs.createDirectory(dir);
-        await vscode.workspace.fs.writeFile(
-          vscode.Uri.file(workspace.promptFile),
-          Buffer.from(`# ${workspace.name} - ${workspace.title}\n\n`)
-        );
+        await handler(...args);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Sabin: ${error instanceof Error ? error.message : error}`);
       }
+    }));
 
-      const document = await vscode.workspace.openTextDocument(workspace.promptFile);
-      await vscode.window.showTextDocument(document);
-    })
-  );
+  register('sabin.refreshTasks', () => {
+    service.invalidate();
+    refresh();
+  });
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.openWorktree', async (arg?: { ticket?: string }) => {
-      const workspace = arg?.ticket ? tree.find(arg.ticket) : tree.focused();
-      if (!workspace) return;
+  register('sabin.newTask', async () => {
+    const title = await vscode.window.showInputBox({
+      prompt: 'Task title',
+      placeHolder: 'Add telemetry to the upload path',
+      validateInput: value => value.trim() ? undefined : 'Give the task a title'
+    });
+    if (!title) return;
 
-      await vscode.commands.executeCommand(
-        'vscode.openFolder',
-        vscode.Uri.file(workspace.worktreeDir),
-        { forceNewWindow: true }
-      );
-    })
-  );
+    const suggested = await service.nextTaskId();
+    const id = await vscode.window.showInputBox({
+      prompt: 'Task ID - Enter to accept, or type an external one like JIRA-12345',
+      value: suggested
+    });
+    if (id === undefined) return;
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.newNote', async () => {
-      const workspace = tree.focused();
-      if (!workspace) {
-        vscode.window.showWarningMessage('No task is focused.');
-        return;
-      }
+    const created = await service.createTask(title.trim(), id.trim() || suggested);
+    refresh();
+    await openDocument(created.taskFile);
+  });
 
-      const name = await vscode.window.showInputBox({
-        prompt: `New note in ${workspace.name}`,
-        placeHolder: 'research, schema.json, data.csv',
-        validateInput: value =>
-          value.trim().length === 0 ? 'Give the note a name' :
-          /[/\\]/.test(value) ? 'Notes cannot contain a path separator' :
-          undefined
-      });
-      if (!name) return;
+  register('sabin.focusTask', async (ticket?: string) => {
+    const target = ticket ?? await pickTicket(service);
+    if (!target) return;
 
-      const filename = noteFilename(name);
-      const target = vscode.Uri.file(path.join(workspace.notesDir, filename));
+    await tree.focus(target);
+    const workspace = tree.find(target);
+    if (!workspace) return;
 
-      await vscode.workspace.fs.createDirectory(vscode.Uri.file(workspace.notesDir));
+    if (focusFolders(workspace) === 'unsupported' && !warnedAboutPlainWindow) {
+      warnedAboutPlainWindow = true;
+      void offerProjectWorkspace(service);
+    }
+  });
 
-      // Never clobber an existing note - just open it
-      try {
-        await vscode.workspace.fs.stat(target);
-      } catch {
-        await vscode.workspace.fs.writeFile(target, Buffer.from(seedFor(filename)));
-      }
+  register('sabin.unpinTask', () => tree.unpin());
 
-      const document = await vscode.workspace.openTextDocument(target);
-      await vscode.window.showTextDocument(document);
-      tree.refresh();
-    })
-  );
+  register('sabin.openProjectWorkspace', async () => {
+    const target = await service.getCodeWorkspacePath();
+    if (!target) {
+      vscode.window.showWarningMessage('No Sabin workspace file found. Run `sabin link` in the project.');
+      return;
+    }
+    await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target));
+  });
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('sabin.unpinTask', () => tree.unpin())
-  );
+  register('sabin.openPrompt', async () => {
+    const workspace = focusedOrWarn();
+    if (!workspace) return;
+    await service.ensureFiles(workspace);
+    await openDocument(workspace.promptFile);
+  });
+
+  register('sabin.openTask', async (arg?: { ticket?: string }) => {
+    const workspace = arg?.ticket ? tree.find(arg.ticket) : focusedOrWarn();
+    if (workspace) await openDocument(workspace.taskFile);
+  });
+
+  register('sabin.openPlan', async (arg?: { ticket?: string }) => {
+    const workspace = arg?.ticket ? tree.find(arg.ticket) : focusedOrWarn();
+    if (!workspace) return;
+
+    if (!workspace.planPath) {
+      vscode.window.showInformationMessage(`${workspace.ticket} has no plan yet. Ask an agent: /sabin plan`);
+      return;
+    }
+    await openDocument(workspace.planPath);
+  });
+
+  register('sabin.openWorktree', async (arg?: { ticket?: string }) => {
+    const workspace = arg?.ticket ? tree.find(arg.ticket) : tree.focused();
+    if (!workspace) return;
+
+    await vscode.commands.executeCommand(
+      'vscode.openFolder',
+      vscode.Uri.file(workspace.worktreeDir),
+      { forceNewWindow: true }
+    );
+  });
+
+  register('sabin.newNote', async () => {
+    const workspace = focusedOrWarn();
+    if (!workspace) return;
+
+    const name = await vscode.window.showInputBox({
+      prompt: `New note in ${workspace.name}`,
+      placeHolder: 'research, schema.json, data.csv',
+      validateInput: value =>
+        value.trim().length === 0 ? 'Give the note a name' :
+        /[/\\]/.test(value) ? 'Notes cannot contain a path separator' :
+        undefined
+    });
+    if (!name) return;
+
+    const filename = noteFilename(name);
+    const target = vscode.Uri.file(path.join(workspace.notesDir, filename));
+
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(workspace.notesDir));
+
+    // Never clobber an existing note - just open it
+    try {
+      await vscode.workspace.fs.stat(target);
+    } catch {
+      await vscode.workspace.fs.writeFile(target, Buffer.from(seedFor(filename)));
+    }
+
+    await openDocument(target.fsPath);
+    tree.refresh();
+  });
+}
+
+async function openDocument(file: string): Promise<void> {
+  const document = await vscode.workspace.openTextDocument(file);
+  await vscode.window.showTextDocument(document);
 }
 
 /**
@@ -209,335 +205,23 @@ async function offerProjectWorkspace(service: WorkspaceService): Promise<void> {
   }
 }
 
+/**
+ * Searchable by ID and title alike - the quick pick matches on both
+ */
 async function pickTicket(service: WorkspaceService): Promise<string | undefined> {
   const workspaces = await service.listWorkspaces();
-  const active = workspaces.filter(w => w.status !== 'completed' && w.status !== 'resolved');
+  const active = workspaces.filter(w => w.status !== 'completed');
 
   const choice = await vscode.window.showQuickPick(
-    active.map(w => ({ label: w.ticket, description: w.title, detail: w.name })),
-    { placeHolder: 'Focus a task' }
+    active.map(w => ({
+      label: w.ticket,
+      description: w.title,
+      detail: `${w.status.replace('_', ' ')}${w.planPath ? ' · plan' : ''}${w.branch ? ` · ${w.branch}` : ''}`
+    })),
+    { placeHolder: 'Focus a task', matchOnDescription: true }
   );
 
   return choice?.label;
 }
 
-async function createNewTask(taskService: TaskService) {
-  console.log('[Sabin Debug] createNewTask called');
-
-  const panel = vscode.window.createWebviewPanel(
-    'newTask',
-    'New Task',
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true
-    }
-  );
-
-  const nextTaskNumber = await taskService.getNextTaskNumber();
-  const projectPrefix = await taskService.getProjectPrefix();
-  panel.webview.html = getNewTaskHtml(panel.webview, nextTaskNumber, projectPrefix);
-
-  // Handle messages from the webview
-  const messageDisposable = panel.webview.onDidReceiveMessage(
-    async (message) => {
-      switch (message.command) {
-        case 'createTask':
-          try {
-            const filePath = await taskService.createTask(message.title, undefined, message.taskNumber);
-            const filename = path.basename(filePath);
-
-            const document = await vscode.workspace.openTextDocument(filePath);
-            await vscode.window.showTextDocument(document);
-
-            vscode.window.showInformationMessage(`Created task: ${filename}`);
-            panel.dispose();
-          } catch (error) {
-            vscode.window.showErrorMessage(`Failed to create task: ${error}`);
-          }
-          break;
-        case 'cancel':
-          panel.dispose();
-          break;
-      }
-    }
-  );
-
-  panel.onDidDispose(() => {
-    messageDisposable.dispose();
-  });
-}
-
-function getNewTaskHtml(webview: vscode.Webview, nextTaskNumber: string, projectPrefix: string): string {
-  const nonce = getNonce();
-  const defaultTaskId = `${projectPrefix}-${nextTaskNumber}`;
-
-  return `<!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>New Task</title>
-      <style>
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-
-        body {
-          font-family: var(--vscode-font-family);
-          font-size: var(--vscode-font-size);
-          color: var(--vscode-foreground);
-          background-color: var(--vscode-editor-background);
-          padding: 0;
-          margin: 0;
-        }
-
-        .dialog {
-          background-color: var(--vscode-sideBar-background);
-          border: 1px solid var(--vscode-widget-border);
-          border-radius: 6px;
-          max-width: 600px;
-          margin: 40px auto;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-        }
-
-        .dialog-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--vscode-widget-border);
-        }
-
-        .dialog-title {
-          font-size: 18px;
-          font-weight: 600;
-          color: var(--vscode-foreground);
-        }
-
-        .close-btn {
-          background: none;
-          border: none;
-          color: var(--vscode-foreground);
-          font-size: 24px;
-          cursor: pointer;
-          padding: 0;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 4px;
-          opacity: 0.8;
-        }
-
-        .close-btn:hover {
-          background-color: var(--vscode-toolbar-hoverBackground);
-          opacity: 1;
-        }
-
-        .dialog-body {
-          padding: 20px;
-        }
-
-        .form-group {
-          margin-bottom: 20px;
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 500;
-          color: var(--vscode-foreground);
-        }
-
-        .required {
-          color: #f85149;
-          margin-left: 4px;
-        }
-
-        .optional {
-          color: var(--vscode-descriptionForeground);
-          font-weight: normal;
-          font-size: 0.9em;
-          margin-left: 4px;
-        }
-
-        input[type="text"],
-        textarea {
-          width: 100%;
-          padding: 10px 12px;
-          background-color: var(--vscode-input-background);
-          color: var(--vscode-input-foreground);
-          border: 1px solid var(--vscode-input-border);
-          border-radius: 4px;
-          font-family: var(--vscode-font-family);
-          font-size: var(--vscode-font-size);
-        }
-
-        input[type="text"]:focus,
-        textarea:focus {
-          outline: none;
-          border-color: var(--vscode-focusBorder);
-          box-shadow: 0 0 0 1px var(--vscode-focusBorder);
-        }
-
-        textarea {
-          resize: vertical;
-          min-height: 120px;
-        }
-
-        input[type="text"]::placeholder,
-        textarea::placeholder {
-          color: var(--vscode-input-placeholderForeground);
-        }
-
-        .dialog-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-          padding: 16px 20px;
-          border-top: 1px solid var(--vscode-widget-border);
-        }
-
-        button {
-          padding: 8px 16px;
-          border-radius: 4px;
-          font-family: var(--vscode-font-family);
-          font-size: var(--vscode-font-size);
-          cursor: pointer;
-          border: none;
-          font-weight: 500;
-        }
-
-        .btn-cancel {
-          background-color: transparent;
-          color: var(--vscode-foreground);
-          border: 1px solid var(--vscode-button-border);
-        }
-
-        .btn-cancel:hover {
-          background-color: var(--vscode-button-hoverBackground);
-        }
-
-        .btn-create {
-          background-color: #1f6feb;
-          color: #ffffff;
-        }
-
-        .btn-create:hover:not(:disabled) {
-          background-color: #1a5fd9;
-        }
-
-        .btn-create:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          background-color: #1f6feb;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="dialog">
-        <div class="dialog-header">
-          <h1 class="dialog-title">New Task</h1>
-          <button class="close-btn" id="close-btn" title="Close">×</button>
-        </div>
-        <div class="dialog-body">
-          <form id="task-form">
-            <div class="form-group">
-              <label class="form-label" for="task-number">
-                Task ID<span class="optional">(auto-generated or custom)</span>
-              </label>
-              <input
-                type="text"
-                id="task-number"
-                placeholder="${defaultTaskId}"
-                value="${defaultTaskId}"
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="title">
-                Title<span class="required">*</span>
-              </label>
-              <input
-                type="text"
-                id="title"
-                placeholder="Enter task title"
-                autofocus
-              />
-            </div>
-          </form>
-        </div>
-        <div class="dialog-footer">
-          <button type="button" class="btn-cancel" id="cancel-btn">Cancel</button>
-          <button type="button" class="btn-create" id="create-btn" disabled>Create Task</button>
-        </div>
-      </div>
-
-      <script nonce="${nonce}">
-        const vscode = acquireVsCodeApi();
-        const taskNumberInput = document.getElementById('task-number');
-        const titleInput = document.getElementById('title');
-        const createBtn = document.getElementById('create-btn');
-        const cancelBtn = document.getElementById('cancel-btn');
-        const closeBtn = document.getElementById('close-btn');
-
-        // Enable/disable create button based on title input
-        titleInput.addEventListener('input', () => {
-          createBtn.disabled = !titleInput.value.trim();
-        });
-
-        // Handle form submission
-        createBtn.addEventListener('click', () => {
-          const taskNumber = taskNumberInput.value.trim();
-          const title = titleInput.value.trim();
-
-          if (title) {
-            vscode.postMessage({
-              command: 'createTask',
-              title: title,
-              taskNumber: taskNumber || undefined
-            });
-          }
-        });
-
-        // Handle Enter key in title field
-        titleInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && titleInput.value.trim()) {
-            e.preventDefault();
-            createBtn.click();
-          }
-        });
-
-        // Handle cancel
-        cancelBtn.addEventListener('click', () => {
-          vscode.postMessage({ command: 'cancel' });
-        });
-
-        closeBtn.addEventListener('click', () => {
-          vscode.postMessage({ command: 'cancel' });
-        });
-
-        // Handle Escape key
-        document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') {
-            vscode.postMessage({ command: 'cancel' });
-          }
-        });
-      </script>
-    </body>
-    </html>`;
-}
-
-function getNonce() {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
-}
-
-export function deactivate() {}
+export function deactivate(): void {}

@@ -1,15 +1,16 @@
-import fs from 'fs/promises';
 import {
-  resolveSabinDir,
   mainWorktreeRoot,
   codeWorkspacePath,
-  writeCodeWorkspace
+  writeCodeWorkspace,
+  planPath,
+  pathExists
 } from '@sabin/core';
-import { getWorkspace, fail } from '../workspace-context';
+import { getWorkspace, loadProject, fail } from '../workspace-context';
 
 interface WhereOptions {
   notes?: boolean;
   prompt?: boolean;
+  plan?: boolean;
   worktree?: boolean;
   task?: boolean;
   sabin?: boolean;
@@ -17,7 +18,7 @@ interface WhereOptions {
 }
 
 /** Paths that belong to a ticket */
-const TICKET_KEYS = ['notes', 'prompt', 'worktree', 'task'] as const;
+const TICKET_KEYS = ['notes', 'prompt', 'plan', 'worktree', 'task'] as const;
 /** Paths that belong to the project, and so need no ticket */
 const PROJECT_KEYS = ['sabin', 'codeWorkspace'] as const;
 
@@ -28,7 +29,7 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
   const selected = [...TICKET_KEYS, ...PROJECT_KEYS].filter(key => options[key]);
 
   if (selected.length > 1) {
-    fail('Pass at most one of --notes, --prompt, --worktree, --task, --sabin, --code-workspace');
+    fail('Pass at most one of --notes, --prompt, --plan, --worktree, --task, --sabin, --code-workspace');
   }
 
   const choice = selected[0] ?? 'notes';
@@ -48,6 +49,9 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
     case 'prompt':
       console.log(workspace.promptFile);
       break;
+    case 'plan':
+      console.log(planPath(workspace.notesDir));
+      break;
     case 'worktree':
       console.log(workspace.worktreeDir);
       break;
@@ -59,7 +63,7 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
 }
 
 async function whereProject(choice: 'sabin' | 'codeWorkspace'): Promise<void> {
-  const { sabinDir, projectRoot } = await resolveSabinDir();
+  const { sabinDir, projectRoot } = await loadProject();
 
   if (choice === 'sabin') {
     console.log(sabinDir);
@@ -73,18 +77,10 @@ async function whereProject(choice: 'sabin' | 'codeWorkspace'): Promise<void> {
 
   // Fully derived from config, so regenerate rather than fail on projects set
   // up before the file existed
-  if (!(await exists(target))) {
+  if (!(await pathExists(target))) {
     await writeCodeWorkspace(sabinDir, mainRoot);
   }
 
   console.log(target);
 }
 
-async function exists(target: string): Promise<boolean> {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-}

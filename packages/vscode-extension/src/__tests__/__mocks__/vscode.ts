@@ -33,7 +33,9 @@ export const window = {
   showErrorMessage: jest.fn(),
   showWarningMessage: jest.fn(),
   showQuickPick: jest.fn(),
-  showTextDocument: jest.fn()
+  showInputBox: jest.fn(),
+  showTextDocument: jest.fn(),
+  setStatusBarMessage: jest.fn()
 };
 
 export const commands = {

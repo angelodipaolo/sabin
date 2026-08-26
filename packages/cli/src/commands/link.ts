@@ -1,8 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
-import ora from 'ora';
-import { confirm } from '@inquirer/prompts';
 import {
   writeSabinLink,
   writeCodeWorkspace,
@@ -11,78 +9,53 @@ import {
   readConfig,
   checkSabinType
 } from '@sabin/core';
+import { expandHome } from './init';
 
+/**
+ * Point this repo at an existing Sabin directory.
+ *
+ * Same setup as `sabin init` minus the scaffolding: link file, workspace
+ * file, local git exclude and the prompts deny rule.
+ */
 export async function linkToSharedSabin(targetPath: string): Promise<void> {
-  const spinner = ora('Linking to shared .sabin...').start();
-
   try {
     const projectRoot = process.cwd();
-    const resolvedTarget = path.resolve(projectRoot, targetPath);
+    const target = path.resolve(projectRoot, expandHome(targetPath));
 
-    // Verify target .sabin exists and is a directory
     try {
-      const stat = await fs.stat(resolvedTarget);
-      if (!stat.isDirectory()) {
-        throw new Error(`${targetPath} is not a directory`);
-      }
-
-      // Verify it's a valid .sabin directory (has config.json)
-      const configPath = path.join(resolvedTarget, 'config.json');
-      await fs.access(configPath);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        throw new Error(
-          `${targetPath} is not a valid .sabin directory.\n` +
-          `Expected to find config.json at: ${path.join(targetPath, 'config.json')}`
-        );
-      }
-      throw error;
-    }
-
-    // Check if .sabin already exists in current directory
-    const currentType = await checkSabinType(projectRoot);
-
-    if (currentType === 'directory') {
-      spinner.warn(chalk.yellow('.sabin directory already exists'));
-      const shouldReplace = await confirm({
-        message: 'Replace local .sabin directory with link to shared directory? This will DELETE the local directory.',
-        default: false
-      });
-
-      if (!shouldReplace) {
-        spinner.info('Cancelled');
-        return;
-      }
-
-      // Remove existing directory
-      await fs.rm(path.join(projectRoot, '.sabin'), { recursive: true, force: true });
-      spinner.text = 'Removed local .sabin directory...';
-    } else if (currentType === 'file') {
+      await fs.access(path.join(target, 'config.json'));
+    } catch {
       throw new Error(
-        '.sabin link already exists.\n' +
-        'Remove it first if you want to link to a different directory.'
+        `${targetPath} is not a Sabin directory - no config.json there.\n` +
+        `Run "sabin init --shared ${targetPath}" to create one.`
       );
     }
 
-    // Create .sabin link file
-    await writeSabinLink(projectRoot, resolvedTarget);
-    const codeWorkspace = await writeCodeWorkspace(resolvedTarget, projectRoot);
+    const existing = await checkSabinType(projectRoot);
+    if (existing === 'directory') {
+      throw new Error(
+        '.sabin is a directory here. Sabin data lives outside the repo now:\n' +
+        `move it to ${target} (or merge it in), delete the directory, then link again.`
+      );
+    }
+    if (existing === 'file') {
+      throw new Error('.sabin link already exists. Remove it first to link somewhere else.');
+    }
 
-    // Same setup `sabin init --shared` performs: ignore the link locally and
-    // deny agents the prompt scratchpads
+    await writeSabinLink(projectRoot, target);
+    const codeWorkspace = await writeCodeWorkspace(target, projectRoot);
     const excluded = await addGitExclude(projectRoot);
-    const config = await readConfig(resolvedTarget);
-    const promptsDir = path.resolve(resolvedTarget, config.promptsDir ?? 'prompts');
-    const denied = await denyPromptsAccess(projectRoot, promptsDir);
+    const config = await readConfig(target);
+    const denied = await denyPromptsAccess(projectRoot, path.resolve(target, config.promptsDir ?? 'prompts'));
 
-    spinner.succeed(chalk.green('Successfully linked to shared .sabin'));
-    console.log(chalk.gray(`Target: ${resolvedTarget}`));
-    console.log(chalk.gray(`Link file: ${path.join(projectRoot, '.sabin')}`));
-    console.log(chalk.gray(`Workspace: ${codeWorkspace}`));
-    console.log(chalk.gray(`Locally ignored: ${excluded ? '.git/info/exclude' : 'no - add .sabin to your ignores'}`));
-    console.log(chalk.gray(`Prompts denied: ${path.relative(projectRoot, denied.path)}`));
+    console.log(chalk.green('Linked to Sabin directory'));
+    console.log(chalk.gray(`  Target:          ${target}`));
+    console.log(chalk.gray(`  Link file:       ${path.join(projectRoot, '.sabin')}`));
+    console.log(chalk.gray(`  Workspace:       ${codeWorkspace}`));
+    console.log(chalk.gray(`  Locally ignored: ${excluded ? '.git/info/exclude' : 'no - add .sabin to your ignores'}`));
+    console.log(chalk.gray(`  Prompts denied:  ${path.relative(projectRoot, denied.path)}`));
   } catch (error: any) {
-    spinner.fail(chalk.red('Failed to link to shared .sabin'));
+    console.error(chalk.red('Failed to link'));
     console.error(chalk.red(error.message));
     process.exit(1);
   }

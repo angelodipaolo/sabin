@@ -30,10 +30,10 @@ async function install() {
 
   console.log('\nSabin installation complete!');
   console.log('\nNext steps:');
-  console.log('  1. Run "sabin init --prefix YOUR_PREFIX" to initialize a project');
-  console.log('  2. (Optional) Run "sabin prompts install" to install Claude Code slash commands');
+  console.log('  1. Run "sabin skill install" so your agent knows the workflow');
+  console.log('  2. Run "sabin init" inside a repo to set it up');
   console.log('  3. Run "sabin --help" to see available commands');
-  console.log('  4. Open VS Code and look for the Sabin activity bar icon');
+  console.log('  4. Run "sabin open" to see the board in VS Code');
 }
 
 install().catch(error => {

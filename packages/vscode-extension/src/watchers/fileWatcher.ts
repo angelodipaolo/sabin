@@ -1,119 +1,36 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
 
+/**
+ * Refresh the views when anything under the Sabin directory changes.
+ *
+ * One watcher over everything: task moves between status directories, edits
+ * to a task, a plan appearing in a notes directory, a non-markdown note being
+ * added. Events are debounced because a status change is a write plus a move.
+ */
 export class SabinFileWatcher implements vscode.Disposable {
-  private fileWatcher: vscode.FileSystemWatcher;
-  private directoryWatcher: vscode.FileSystemWatcher;
-  private debounceTimer: NodeJS.Timeout | undefined;
-  private readonly debounceDelay = 500;
-  private renameDebounceTimer: NodeJS.Timeout | undefined;
-  private readonly renameDebounceDelay = 300;
+  private watcher: vscode.FileSystemWatcher;
+  private timer: NodeJS.Timeout | undefined;
 
-  constructor(private onChangeCallback: () => void) {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceRoot) {
-      throw new Error('No workspace folder found');
-    }
-
-    // Resolve .sabin location
-    const sabinDir = this.resolveSabinDir(workspaceRoot.uri.fsPath);
-
-    // Watch for file changes
-    const filePattern = new vscode.RelativePattern(
-      sabinDir,
-      '**/*.md'
-    );
-
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(filePattern);
-
-    this.fileWatcher.onDidChange(() => this.handleChange());
-    this.fileWatcher.onDidCreate(() => this.handleChange());
-    this.fileWatcher.onDidDelete(() => this.handleRename());
-
-    // Watch for directory changes (to catch moves between directories)
-    const dirPattern = new vscode.RelativePattern(
-      sabinDir,
-      'tasks/**'
-    );
-
-    this.directoryWatcher = vscode.workspace.createFileSystemWatcher(dirPattern);
-
-    // When files are created/deleted in directories, it indicates a move
-    this.directoryWatcher.onDidCreate(() => this.handleRename());
-    this.directoryWatcher.onDidDelete(() => this.handleRename());
+  constructor(sabinDir: string, private onChange: () => void, private debounceMs = 300) {
+    this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(sabinDir, '**/*'));
+    this.watcher.onDidChange(uri => this.schedule(uri));
+    this.watcher.onDidCreate(uri => this.schedule(uri));
+    this.watcher.onDidDelete(uri => this.schedule(uri));
   }
 
-  private resolveSabinDir(workspaceRoot: string): string {
-    // Check if workspace root itself is a .sabin directory
-    // by looking for characteristic files/folders
-    if (this.isSabinDirectory(workspaceRoot)) {
-      return workspaceRoot;
-    }
+  private schedule(uri: vscode.Uri): void {
+    // The CLI's lock directory comes and goes on every status write
+    if (/[\\/]\.lock([\\/]|$)/.test(uri.fsPath)) return;
 
-    const sabinPath = path.join(workspaceRoot, '.sabin');
-
-    try {
-      const stat = fs.statSync(sabinPath);
-
-      if (stat.isFile()) {
-        // Read link file
-        const content = fs.readFileSync(sabinPath, 'utf8');
-        const config = JSON.parse(content);
-        if (config.sabinDir) {
-          return path.resolve(workspaceRoot, config.sabinDir);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to read .sabin:', error);
-    }
-
-    // Default to treating as directory
-    return sabinPath;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.onChange();
+    }, this.debounceMs);
   }
 
-  /**
-   * Check if a directory is a .sabin directory by looking for characteristic structure
-   */
-  private isSabinDirectory(dirPath: string): boolean {
-    // Check for tasks/ directory or config.json file
-    const tasksDir = path.join(dirPath, 'tasks');
-    const configFile = path.join(dirPath, 'config.json');
-
-    return fs.existsSync(tasksDir) || fs.existsSync(configFile);
-  }
-
-  private handleChange() {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-
-    this.debounceTimer = setTimeout(() => {
-      this.onChangeCallback();
-      this.debounceTimer = undefined;
-    }, this.debounceDelay);
-  }
-
-  private handleRename() {
-    // Use a separate, shorter debounce for renames to ensure quick updates
-    if (this.renameDebounceTimer) {
-      clearTimeout(this.renameDebounceTimer);
-    }
-
-    this.renameDebounceTimer = setTimeout(() => {
-      this.onChangeCallback();
-      this.renameDebounceTimer = undefined;
-    }, this.renameDebounceDelay);
-  }
-
-  dispose() {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    if (this.renameDebounceTimer) {
-      clearTimeout(this.renameDebounceTimer);
-    }
-    this.fileWatcher.dispose();
-    this.directoryWatcher.dispose();
+  dispose(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.watcher.dispose();
   }
 }

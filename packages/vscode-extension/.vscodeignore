@@ -1,9 +1,8 @@
 .vscode/**
 .vscode-test/**
 src/**
+coverage/**
 .gitignore
-.yarnrc
-vsc-extension-quickstart.md
 **/tsconfig.json
 **/.eslintrc.json
 **/*.ts
@@ -11,9 +10,10 @@ node_modules/**
 .DS_Store
 *.vsix
 esbuild.js
+jest.config.js
 test/**
 __tests__/**
 **/*.test.js
 **/*.spec.js
-../../**
 ../**
+../../**

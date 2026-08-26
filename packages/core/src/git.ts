@@ -127,9 +127,3 @@ export async function addWorktree(cwd: string, worktreePath: string, branch: str
   await git(args, cwd);
 }
 
-export async function removeWorktree(cwd: string, worktreePath: string, force = false): Promise<void> {
-  const args = ['worktree', 'remove'];
-  if (force) args.push('--force');
-  args.push(worktreePath);
-  await git(args, cwd);
-}

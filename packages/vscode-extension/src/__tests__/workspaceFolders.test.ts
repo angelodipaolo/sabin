@@ -20,7 +20,8 @@ function workspaceFor(name: string): TaskWorkspace {
     notesDir: `/sabin/notes/${name}`,
     promptFile: `/sabin/prompts/${name}.md`,
     worktreeDir: `/dev/repo-worktrees/${name}`,
-    branch: `angelo/${name}`
+    branch: `angelo/${name}`,
+    planPath: null
   };
 }
 

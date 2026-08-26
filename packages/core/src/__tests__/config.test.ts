@@ -12,7 +12,7 @@ describe('config utilities', () => {
 
   describe('readConfig', () => {
     it('should return defaults when config file is missing', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT: no such file or directory'));
+      mockFs.readFile.mockRejectedValue(Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }));
 
       const config = await readConfig('.sabin');
 
@@ -33,15 +33,10 @@ describe('config utilities', () => {
       });
     });
 
-    it('should handle invalid JSON gracefully', async () => {
+    it('should fail loudly on invalid JSON rather than defaulting the prefix', async () => {
       mockFs.readFile.mockResolvedValue('not valid json{');
 
-      const config = await readConfig('.sabin');
-
-      expect(config).toEqual({
-        projectPrefix: 'TASK',
-        taskNumberPadding: 4
-      });
+      await expect(readConfig('.sabin')).rejects.toThrow(/Could not parse/);
     });
 
     it('should read complete config correctly', async () => {
@@ -81,7 +76,7 @@ describe('config utilities', () => {
       await writeConfig({
         projectPrefix: 'TASK',
         taskNumberPadding: 4
-      });
+      }, '.sabin');
 
       const writtenContent = (mockFs.writeFile.mock.calls[0][1] as string);
       expect(writtenContent).toContain('{\n  "projectPrefix"');

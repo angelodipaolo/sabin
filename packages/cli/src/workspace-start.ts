@@ -4,24 +4,24 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import chalk from 'chalk';
 import {
-  parseTask,
-  writeTask,
-  readConfig,
-  resolveSabinDir,
+  findTask,
+  createTask,
+  setTaskStatus,
   resolveWorkspace,
   workspacePaths,
+  scaffoldWorkspace,
+  titleFromSlug,
   branchNameFor,
   parseTicketArg,
   slugify,
   addWorktree,
   listWorktrees,
   writeSabinLink,
-  withLock,
+  pathExists,
   SabinConfig,
   Workspace
 } from '@sabin/core';
-import { fail } from './workspace-context';
-import { ensureWorkspaceFiles, createTaskFile, exists } from './workspace-scaffold';
+import { fail, loadProject } from './workspace-context';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,8 +59,7 @@ export async function ensureWorkspace(
   ticketArg: string,
   options: EnsureWorkspaceOptions = {}
 ): Promise<StartedWorkspace> {
-  const { sabinDir } = await resolveSabinDir();
-  const config = await readConfig(sabinDir);
+  const { sabinDir, config } = await loadProject();
 
   const parsed = parseTicketArg(ticketArg);
   if (!parsed) {
@@ -77,29 +76,31 @@ export async function ensureWorkspace(
     slug: options.title ? slugify(options.title) : undefined
   });
 
-  let taskFile = workspace.taskFile;
   const created: string[] = [];
+  let task = await findTask(sabinDir, parsed.ticket);
 
   // A descriptive suffix or an explicit title is enough to create the task
-  if (!taskFile) {
+  if (!task) {
     if (!options.createTask) {
       fail(
         `No task found for ${parsed.ticket}.\n` +
-        `Create it first:  sabin task create -n ${parsed.ticket} -t "<title>"`
+        `Create it first:  sabin task create "<title>" -n ${parsed.ticket}`
       );
     }
     if (!parsed.slug && !options.title) {
       fail(
         `No task found for ${parsed.ticket}.\n` +
         `Add a description to create it:  sabin start ${parsed.ticket}-<description>\n` +
-        `Or create it first:              sabin task create -n ${parsed.ticket} -t "<title>"`
+        `Or create it first:              sabin task create "<title>" -n ${parsed.ticket}`
       );
     }
-    taskFile = await createTaskFile(sabinDir, parsed.ticket, workspace.slug, options.title);
-    created.push(taskFile);
+    task = await createTask(sabinDir, config, {
+      id: parsed.ticket,
+      title: options.title ?? (workspace.slug ? titleFromSlug(workspace.slug) : parsed.ticket),
+      slug: workspace.slug ?? undefined
+    });
+    created.push(task.path);
   }
-
-  const task = await parseTask(taskFile);
 
   // The recorded suffix wins, so a workspace keeps its paths for life
   if (parsed.slug && task.slug && parsed.slug !== task.slug) {
@@ -114,7 +115,6 @@ export async function ensureWorkspace(
   const branch = task.branch ?? branchNameFor(parsed.ticket, slug, config);
   const paths = workspacePaths({ ticket: parsed.ticket, slug }, sabinDir, workspace.mainRoot, config);
 
-  // Worktree and branch
   let worktreeDir: string | null = null;
   if (!options.noWorktree) {
     if (!workspace.mainRoot) {
@@ -125,24 +125,19 @@ export async function ensureWorkspace(
     await runPostCreate(config.worktrees?.postCreate ?? [], worktreeDir, created.includes(worktreeDir));
   }
 
-  // Notes directory and prompt scratchpad, if drafting did not make them
-  await ensureWorkspaceFiles(paths, task.title, created);
+  await scaffoldWorkspace(paths, task.title, created);
 
-  // Task state
-  await withLock(sabinDir, async () => {
-    const current = await parseTask(taskFile!);
-    current.status = 'in_progress';
-    current.branch = branch;
-    if (slug) current.slug = slug;
-    if (worktreeDir) current.worktree = worktreeDir;
-    await writeTask(current);
+  const updated = await setTaskStatus(sabinDir, task.id, 'in_progress', {
+    branch,
+    slug: slug ?? undefined,
+    worktree: worktreeDir ?? undefined
   });
 
   return {
-    workspace: { ...workspace, ...paths, taskFile },
+    workspace: { ...workspace, ...paths, taskFile: updated.path },
     config,
     sabinDir,
-    taskFile,
+    taskFile: updated.path,
     branch,
     worktreeDir,
     created
@@ -168,12 +163,11 @@ async function ensureWorktree(
 }
 
 /**
- * Drop a .sabin link into the worktree so commands resolve there directly,
- * unless the shared directory already lives inside it.
+ * Drop a .sabin link into the worktree so commands resolve there directly
  */
 async function ensureSabinLink(worktreeDir: string, sabinDir: string): Promise<void> {
   if (sabinDir.startsWith(worktreeDir + path.sep)) return;
-  if (await exists(path.join(worktreeDir, '.sabin'))) return;
+  if (await pathExists(path.join(worktreeDir, '.sabin'))) return;
   await writeSabinLink(worktreeDir, sabinDir);
 }
 

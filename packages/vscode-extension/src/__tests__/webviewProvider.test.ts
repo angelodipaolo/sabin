@@ -1,409 +1,137 @@
-import { SabinWebviewProvider } from '../providers/webviewProvider';
-import { TaskService } from '../services/taskService';
+import { SabinWebviewProvider, toCard } from '../providers/webviewProvider';
+import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
 
 jest.mock('vscode');
-jest.mock('fs');
+
+const workspace = (overrides: Partial<TaskWorkspace> = {}): TaskWorkspace => ({
+  ticket: 'SABIN-0001',
+  name: 'SABIN-0001-thing',
+  title: 'Do the <thing>',
+  status: 'open',
+  slug: 'thing',
+  taskFile: '/sabin/tasks/open/SABIN-0001.md',
+  notesDir: '/sabin/notes/SABIN-0001-thing',
+  promptFile: '/sabin/prompts/SABIN-0001-thing.md',
+  worktreeDir: '/repo-worktrees/SABIN-0001-thing',
+  branch: null,
+  planPath: null,
+  ...overrides
+});
 
 describe('SabinWebviewProvider', () => {
   let provider: SabinWebviewProvider;
-  let mockTaskService: jest.Mocked<TaskService>;
-  let mockWebviewView: any;
-  let mockWebview: any;
-  let messageHandler: (data: any) => Promise<void>;
+  let service: jest.Mocked<WorkspaceService>;
+  let webview: any;
+  let handler: (message: any) => Promise<void>;
+  const vscode = require('vscode');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
-    const vscode = require('vscode');
-    const fs = require('fs');
-
-    // Mock TaskService
-    mockTaskService = {
-      getTasks: jest.fn().mockResolvedValue([
-        {
-          id: 'TASK-0001',
-          status: 'open',
-          title: 'Test Task',
-          content: 'Content',
-          path: '/path/to/task.md',
-          filename: 'TASK-0001.md'
-        }
-      ]),
-      createTask: jest.fn().mockResolvedValue('/path/to/TASK-0002.md'),
-      updateTaskStatus: jest.fn().mockResolvedValue(undefined),
+    service = {
+      listWorkspaces: jest.fn().mockResolvedValue([workspace()]),
+      find: jest.fn().mockResolvedValue(workspace()),
+      setStatus: jest.fn().mockResolvedValue(undefined),
       deleteTask: jest.fn().mockResolvedValue(undefined)
     } as any;
 
-    // Mock webview
-    mockWebview = {
+    webview = {
       html: '',
       options: {},
-      onDidReceiveMessage: jest.fn((handler) => {
-        messageHandler = handler;
-      }),
+      cspSource: 'vscode-resource:',
+      onDidReceiveMessage: jest.fn(fn => { handler = fn; }),
       postMessage: jest.fn(),
-      asWebviewUri: jest.fn((uri) => uri)
+      asWebviewUri: jest.fn(uri => uri.fsPath)
     };
 
-    // Mock webview view
-    mockWebviewView = {
-      webview: mockWebview,
-      visible: true,
-      onDidChangeVisibility: jest.fn()
-    };
-
-    // Configure vscode workspace
-    vscode.workspace.workspaceFolders = [{
-      uri: { fsPath: '/workspace' },
-      name: 'test',
-      index: 0
-    }];
-
-    // Mock fs
-    fs.existsSync = jest.fn().mockReturnValue(true);
-
-    const extensionUri = { fsPath: '/extension', path: '/extension' };
-    provider = new SabinWebviewProvider(extensionUri as any, mockTaskService);
+    provider = new SabinWebviewProvider({ fsPath: '/ext', path: '/ext' } as any, service);
+    provider.resolveWebviewView({ webview, visible: true, onDidChangeVisibility: jest.fn() } as any);
+    await flush();
   });
 
-  describe('resolveWebviewView', () => {
-    it('should initialize webview with correct options', () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      expect(mockWebviewView.webview.options).toEqual({
-        enableScripts: true,
-        localResourceRoots: [expect.objectContaining({ fsPath: '/extension' })]
-      });
-    });
-
-    it('should set HTML content on initialization', () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      expect(mockWebview.html).toBeTruthy();
-      expect(mockWebview.html).toContain('<!DOCTYPE html>');
-    });
-
-    it('should register message handler', () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      expect(mockWebview.onDidReceiveMessage).toHaveBeenCalled();
-    });
-
-    it('should register visibility change handler', () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      expect(mockWebviewView.onDidChangeVisibility).toHaveBeenCalled();
-    });
-
-    it('should refresh tasks on initialization', () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      expect(mockTaskService.getTasks).toHaveBeenCalled();
-    });
+  it('renders a CSP-restricted page that loads the board script', () => {
+    expect(webview.options.enableScripts).toBe(true);
+    expect(webview.html).toContain('Content-Security-Policy');
+    expect(webview.html).toContain('/ext/media/board.js');
+    expect(webview.html).toContain('data-statuses="open,ready,in_progress,review,completed"');
   });
 
-  describe('message handling - createTask', () => {
-    beforeEach(() => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
+  it('posts the task cards on resolve and on refresh', async () => {
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      command: 'tasks',
+      tasks: [toCard(workspace())]
     });
 
-    it('should create task with provided payload', async () => {
-      await messageHandler({
-        command: 'createTask',
-        payload: {
-          title: 'New Task',
-          description: 'Description',
-          taskNumber: undefined
-        }
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(mockTaskService.createTask).toHaveBeenCalledWith(
-        'New Task',
-        'Description',
-        undefined
-      );
-    });
-
-    it('should show success message after creating task', async () => {
-      const vscode = require('vscode');
-
-      await messageHandler({
-        command: 'createTask',
-        payload: { title: 'New Task' }
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Created task: TASK-0002.md'
-      );
-    });
-
-    it('should refresh after creating task', async () => {
-      await messageHandler({
-        command: 'createTask',
-        payload: { title: 'New Task' }
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(mockTaskService.getTasks).toHaveBeenCalledTimes(2); // Once on init, once on refresh
-    });
+    webview.postMessage.mockClear();
+    await handler({ command: 'refresh' });
+    await flush();
+    expect(webview.postMessage).toHaveBeenCalledTimes(1);
   });
 
-  describe('message handling - updateStatus', () => {
-    beforeEach(() => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-    });
+  it('routes focus, open and plan actions to the extension commands', async () => {
+    await handler({ command: 'focus', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.focusTask', 'SABIN-0001');
 
-    it('should update task status', async () => {
-      await messageHandler({
-        command: 'updateStatus',
-        taskId: 'TASK-0001',
-        status: 'completed'
-      });
+    await handler({ command: 'openTask', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openTask', { ticket: 'SABIN-0001' });
 
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
+    await handler({ command: 'openPlan', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openPlan', { ticket: 'SABIN-0001' });
 
-      expect(mockTaskService.updateTaskStatus).toHaveBeenCalledWith(
-        'TASK-0001',
-        'completed'
-      );
-    });
-
-    it('should show success message after updating status', async () => {
-      const vscode = require('vscode');
-
-      await messageHandler({
-        command: 'updateStatus',
-        taskId: 'TASK-0001',
-        status: 'ready'
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Updated TASK-0001 status to: ready'
-      );
-    });
-
-    it('should show error on update failure', async () => {
-      const vscode = require('vscode');
-      mockTaskService.updateTaskStatus.mockRejectedValue(new Error('Update failed'));
-
-      // Error is caught and shown to user
-      await messageHandler({
-        command: 'updateStatus',
-        taskId: 'TASK-0001',
-        status: 'ready'
-      });
-
-      expect(vscode.window.showErrorMessage).toHaveBeenCalled();
-    });
+    await handler({ command: 'newTask' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.newTask');
   });
 
-  describe('message handling - showUpdateStatusDialog', () => {
-    beforeEach(() => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-    });
+  it('changes status through the service and refreshes', async () => {
+    webview.postMessage.mockClear();
+    await handler({ command: 'setStatus', ticket: 'SABIN-0001', status: 'review' });
+    await flush();
 
-    it('should show quick pick with status options', async () => {
-      const vscode = require('vscode');
-      vscode.window.showQuickPick.mockResolvedValue('ready');
-
-      await messageHandler({
-        command: 'showUpdateStatusDialog',
-        taskId: 'TASK-0001',
-        currentStatus: 'open'
-      });
-
-      expect(vscode.window.showQuickPick).toHaveBeenCalledWith(
-        ['open', 'ready', 'in_progress', 'review', 'completed'],
-        { placeHolder: 'Current status: open. Select new status:' }
-      );
-    });
-
-    it('should update status when user selects option', async () => {
-      const vscode = require('vscode');
-      vscode.window.showQuickPick.mockResolvedValue('completed');
-
-      await messageHandler({
-        command: 'showUpdateStatusDialog',
-        taskId: 'TASK-0001',
-        currentStatus: 'review'
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(mockTaskService.updateTaskStatus).toHaveBeenCalledWith(
-        'TASK-0001',
-        'completed'
-      );
-    });
-
-    it('should not update status when user cancels', async () => {
-      const vscode = require('vscode');
-      vscode.window.showQuickPick.mockResolvedValue(undefined);
-
-      await messageHandler({
-        command: 'showUpdateStatusDialog',
-        taskId: 'TASK-0001',
-        currentStatus: 'open'
-      });
-
-      expect(mockTaskService.updateTaskStatus).not.toHaveBeenCalled();
-    });
+    expect(service.setStatus).toHaveBeenCalledWith('SABIN-0001', 'review');
+    expect(webview.postMessage).toHaveBeenCalled();
   });
 
-  describe('message handling - deleteTask', () => {
-    beforeEach(() => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-    });
-
-    it('should show confirmation dialog', async () => {
-      const vscode = require('vscode');
-      vscode.window.showWarningMessage.mockResolvedValue(undefined);
-
-      await messageHandler({
-        command: 'deleteTask',
-        taskId: 'TASK-0001',
-        taskPath: '/path/to/task.md'
-      });
-
-      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'Are you sure you want to delete TASK-0001?',
-        { modal: true },
-        'Delete'
-      );
-    });
-
-    it('should delete task when confirmed', async () => {
-      const vscode = require('vscode');
-      vscode.window.showWarningMessage.mockResolvedValue('Delete');
-
-      await messageHandler({
-        command: 'deleteTask',
-        taskId: 'TASK-0001',
-        taskPath: '/path/to/task.md'
-      });
-
-      // Wait for the delayed refresh
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      expect(mockTaskService.deleteTask).toHaveBeenCalledWith('/path/to/task.md');
-    });
-
-    it('should not delete task when cancelled', async () => {
-      const vscode = require('vscode');
-      vscode.window.showWarningMessage.mockResolvedValue(undefined);
-
-      await messageHandler({
-        command: 'deleteTask',
-        taskId: 'TASK-0001',
-        taskPath: '/path/to/task.md'
-      });
-
-      expect(mockTaskService.deleteTask).not.toHaveBeenCalled();
-    });
+  it('ignores an unknown status', async () => {
+    await handler({ command: 'setStatus', ticket: 'SABIN-0001', status: 'bogus' });
+    expect(service.setStatus).not.toHaveBeenCalled();
   });
 
-  describe('message handling - refreshTasks', () => {
-    it('should refresh tasks on command', async () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-      mockTaskService.getTasks.mockClear();
+  it('deletes only after confirmation', async () => {
+    vscode.window.showWarningMessage.mockResolvedValueOnce(undefined);
+    await handler({ command: 'deleteTask', ticket: 'SABIN-0001' });
+    expect(service.deleteTask).not.toHaveBeenCalled();
 
-      await messageHandler({ command: 'refreshTasks' });
-
-      expect(mockTaskService.getTasks).toHaveBeenCalled();
-    });
+    vscode.window.showWarningMessage.mockResolvedValueOnce('Delete');
+    await handler({ command: 'deleteTask', ticket: 'SABIN-0001' });
+    expect(service.deleteTask).toHaveBeenCalledWith('SABIN-0001');
   });
 
-  describe('message handling - showCreateTaskDialog', () => {
-    it('should execute sabin.newTask command', async () => {
-      const vscode = require('vscode');
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-
-      await messageHandler({ command: 'showCreateTaskDialog' });
-
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.newTask');
-    });
+  it('copies the task path resolved by the service, not one sent by the page', async () => {
+    await handler({ command: 'copyPath', ticket: 'SABIN-0001' });
+    expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('/sabin/tasks/open/SABIN-0001.md');
   });
 
-  describe('refresh', () => {
-    it('should update webview content when view is available', async () => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-      mockWebview.postMessage.mockClear();
-
-      provider.refresh();
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      expect(mockWebview.postMessage).toHaveBeenCalledWith({
-        command: 'updateTasks',
-        tasks: expect.any(Array)
-      });
-    });
-
-    it('should not crash when view is not available', () => {
-      expect(() => provider.refresh()).not.toThrow();
-    });
+  it('surfaces service errors instead of swallowing them', async () => {
+    service.setStatus.mockRejectedValueOnce(new Error('Task not found: SABIN-0001'));
+    await handler({ command: 'setStatus', ticket: 'SABIN-0001', status: 'ready' });
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Sabin: Task not found: SABIN-0001');
   });
 
-  describe('visibility change', () => {
-    it('should refresh when webview becomes visible', () => {
-      let visibilityHandler: () => void;
-      mockWebviewView.onDidChangeVisibility.mockImplementation((handler: () => void) => {
-        visibilityHandler = handler;
+  describe('toCard', () => {
+    it('sends only what the board needs', () => {
+      const card = toCard(workspace({ planPath: '/sabin/notes/x/plan.md', branch: 'me/SABIN-0001-thing' }));
+      expect(card).toEqual({
+        ticket: 'SABIN-0001',
+        title: 'Do the <thing>',
+        status: 'open',
+        hasPlan: true,
+        hasWorktree: true,
+        branch: 'me/SABIN-0001-thing'
       });
-
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-      mockTaskService.getTasks.mockClear();
-
-      mockWebviewView.visible = true;
-      visibilityHandler!();
-
-      expect(mockTaskService.getTasks).toHaveBeenCalled();
-    });
-
-    it('should not refresh when webview is not visible', () => {
-      let visibilityHandler: () => void;
-      mockWebviewView.onDidChangeVisibility.mockImplementation((handler: () => void) => {
-        visibilityHandler = handler;
-      });
-
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-      mockTaskService.getTasks.mockClear();
-
-      mockWebviewView.visible = false;
-      visibilityHandler!();
-
-      expect(mockTaskService.getTasks).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('error handling', () => {
-    beforeEach(() => {
-      provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
-    });
-
-    it('should handle errors during message processing', async () => {
-      const vscode = require('vscode');
-      mockTaskService.createTask.mockRejectedValue(new Error('Creation failed'));
-
-      // Error is caught and shown to user, doesn't propagate
-      await messageHandler({
-        command: 'createTask',
-        payload: { title: 'Test' }
-      });
-
-      expect(vscode.window.showErrorMessage).toHaveBeenCalled();
     });
   });
 });
+
+function flush(): Promise<void> {
+  return new Promise(resolve => setImmediate(resolve));
+}

@@ -16,15 +16,14 @@ export class WorkspaceNode extends vscode.TreeItem {
   }
 }
 
-const STATUS_ORDER = ['in_progress', 'review', 'ready', 'open', 'completed', 'resolved'];
+const STATUS_ORDER = ['in_progress', 'review', 'ready', 'open', 'completed'];
 
 const STATUS_LABELS: Record<string, string> = {
   in_progress: 'In progress',
   review: 'In review',
   ready: 'Ready',
   open: 'Open',
-  completed: 'Completed',
-  resolved: 'Resolved'
+  completed: 'Completed'
 };
 
 /**
@@ -134,10 +133,10 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
       nodes.push(node);
     }
 
-    const present = new Set(this.workspaces.map(w => w.status));
+    const present = new Set<string>(this.workspaces.map(w => w.status));
     for (const status of STATUS_ORDER) {
       if (!present.has(status)) continue;
-      if (status === 'completed' || status === 'resolved') continue;
+      if (status === 'completed') continue;
 
       const group = new WorkspaceNode(
         STATUS_LABELS[status] ?? status,
@@ -208,7 +207,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
           vscode.TreeItemCollapsibleState.None,
           workspace
         );
-        node.description = workspace.title;
+        node.description = workspace.planPath ? `${workspace.title} · plan` : workspace.title;
         node.iconPath = new vscode.ThemeIcon(
           workspace.ticket === this.focusedTicket ? 'circle-filled' : 'circle-outline'
         );

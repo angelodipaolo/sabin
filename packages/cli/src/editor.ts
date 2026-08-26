@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import chalk from 'chalk';
-import { resolveSabinDir, readConfig } from '@sabin/core';
+import { loadProject } from './workspace-context';
 
 /**
  * Editor precedence: explicit flag, SABIN_EDITOR, config, then VS Code
@@ -10,8 +10,7 @@ export async function resolveEditor(flag?: string): Promise<string> {
   if (process.env.SABIN_EDITOR) return process.env.SABIN_EDITOR;
 
   try {
-    const { sabinDir } = await resolveSabinDir();
-    const config = await readConfig(sabinDir) as { editor?: string };
+    const { config } = await loadProject();
     if (config.editor) return config.editor;
   } catch {
     // Fall through to the default

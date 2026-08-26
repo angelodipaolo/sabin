@@ -8,32 +8,41 @@ import {
   Workspace
 } from '@sabin/core';
 
-export interface CliWorkspace {
-  workspace: Workspace;
-  config: SabinConfig;
-  isLinked: boolean;
+export interface Project {
+  sabinDir: string;
   projectRoot: string;
+  config: SabinConfig;
+}
+
+export interface CliWorkspace extends Project {
+  workspace: Workspace;
 }
 
 /**
- * Resolve .sabin, config and the current workspace in one step.
+ * Resolve .sabin and its config - what every command needs before it can
+ * do anything
+ */
+export async function loadProject(): Promise<Project> {
+  const { sabinDir, projectRoot } = await resolveSabinDir();
+  const config = await readConfig(sabinDir);
+  return { sabinDir, projectRoot, config };
+}
+
+/**
+ * Resolve the project and the current ticket's workspace in one step.
  *
  * Exits with a clear message rather than guessing when no ticket can be
  * determined - silently resolving to the wrong ticket's notes would be worse
  * than failing.
  */
 export async function getWorkspace(ticket?: string): Promise<CliWorkspace> {
-  const { sabinDir, isLinked, projectRoot } = await resolveSabinDir();
-  const config = await readConfig(sabinDir);
+  const project = await loadProject();
 
   try {
-    const workspace = await resolveWorkspace({ sabinDir, config, ticket });
-    return { workspace, config, isLinked, projectRoot };
+    const workspace = await resolveWorkspace({ sabinDir: project.sabinDir, config: project.config, ticket });
+    return { ...project, workspace };
   } catch (error) {
-    if (error instanceof NoTicketError) {
-      console.error(chalk.red(error.message));
-      process.exit(1);
-    }
+    if (error instanceof NoTicketError) fail(error.message);
     throw error;
   }
 }

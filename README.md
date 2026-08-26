@@ -1,297 +1,188 @@
-# Sabin Workflow Management System
+# Sabin
 
-Sabin gives your AI agent a structured workflow system, right in your codebase. Sabin is composed of a CLI, a VS code extension, and a set of prompts that power a workflow for planning and managing agentic tasks.
+A worktree command center for agentic coding. Write up a task, hand it to an
+agent in its own worktree, review what comes back - from the terminal, with VS
+Code and iTerm2 alongside.
 
-## Features
+Everything is text. A task is a markdown file; its notes are a directory; its
+plan is `plan.md` in that directory. The CLI owns the parts the filesystem
+cannot know - ID allocation, status transitions, branches and worktrees - and
+ordinary file tools own the rest.
 
-Sabin manages work through simple markdown files with YAML frontmatter, organized in a .sabin directory:
-```bash
-.sabin/
-  tasks/
-    open/TASK-0001.md       # Initial requirements
-    open/TASK-0002.md       # Ready for implementation
-    completed/TASK-0003.md  # Done and committed
-  notes/TASK-0001/          # Per-ticket notes, with the ticket's plan.md
-  research/                 # Cross-cutting context and research
-```
-Each task moves through a clear lifecycle:
-- open → Initial requirements, needs planning
-- ready → Planned and ready for implementation
-- review → Implementation done, needs testing/review
-- completed → Approved and committed
-
-### File-Based = Agent-Friendly
-
-Because tasks are just markdown files in your repo:
-- AI agents can read and write them directly - no API required
-- Version controlled with your code - full history in git
-- Edit in your local editor - VS Code, Vim, whatever you use
-- No web UI context switching - everything stays in your workspace
-- Works across all your projects - same simple structure everywhere
-
-### CLI for Programmatic Control
-
-The Sabin CLI gives AI agents tools to manage the workflow:
-```bash
-sabin task create -t "Add authentication" -c "Implement JWT-based auth"
-sabin task list --status ready
-sabin task update TASK-0001 review
-```
-
-Your AI agent can use these commands to:
-- Create tasks as it discovers work
-- Track what it's currently implementing
-- Mark tasks for your review
-- Query its backlog
-
-### VS Code Integration
-
-The VS Code extension visualizes your workflow without leaving the editor:
-- Sidebar view showing tasks by status
-- Zero configuration - activates when .sabin directory detected
-- Create 
-
-### Perfect for AI-Driven Development
-
-Traditional project management tools were built for humans coordinating with humans. Sabin is built for the developer+AI workflow:
-
-- Prompt files live with tasks - plans and research right in .sabin
-- Agents track their own work - no manual status updates needed
-- Simple file format - easy for AI to parse and generate
-
-## Installation
-
-### Prerequisites
-
-- Node.js v16 or higher
-- npm v7 or higher
-- VS Code (for the extension)
-
-### Install from Source
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/sabin.git
-cd sabin
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Build all packages:
-```bash
-npm run build
-```
-
-### Install VS Code Extension
-
-#### Option 1: Install from VSIX (Recommended for Testing)
-
-1. Build the extension:
-```bash
-cd packages/vscode-extension
-npm run compile
-npx @vscode/vsce package
-```
-
-2. Install the generated VSIX file in VS Code:
-   - Open VS Code
-   - Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-   - Type "Extensions: Install from VSIX..."
-   - Select the `sabin-vscode-0.1.0.vsix` file from `packages/vscode-extension/`
-
-#### Option 2: Development Mode
-
-1. Open the project in VS Code:
-```bash
-code .
-```
-
-2. Navigate to the extension directory:
-```bash
-cd packages/vscode-extension
-```
-
-3. Press `F5` to launch a new VS Code window with the extension loaded in development mode
-
-#### Uninstall Extension
+## The workflow
 
 ```bash
-code --uninstall-extension sabin.sabin-vscode
+sabin task create "Add telemetry to uploads" --open   # task file + notes dir, opens in your editor
+sabin run SABIN-0012                                   # worktree, branch, in_progress, agent launched in it
+sabin run SABIN-0012 --tab                             # ...in a new iTerm2 tab, keeping this shell
+sabin task list                                        # what is in flight
+sabin open                                             # board, notes and prompts in one VS Code window
 ```
 
-### Install CLI
+The agent follows the **sabin skill**: it orients with `sabin context --json`,
+reads the ticket's notes, writes plans and research there, and moves the task
+to `review` when it has committed. You review and say `/sabin complete`; the
+agent marks it completed and follows your project's completion hook - "push
+and open a PR", say. Worktrees are never removed for you.
+
+Optional steps in between, all via the skill: `/sabin create` to expand a
+rough idea into a task, `/sabin plan` to write a plan, `/sabin review` to have
+a fresh agent review the diff.
+
+### Statuses
+
+| Status | Meaning |
+| --- | --- |
+| `open` | Requirements captured |
+| `ready` | Planned, ready to implement |
+| `in_progress` | An agent (or you) is on it |
+| `review` | Finished and committed, waiting on you |
+| `completed` | Approved; file moves to `tasks/completed/` |
+
+## Layout
+
+Sabin data lives **outside the repo** so every worktree sees the same board:
+
+```
+~/notes/myproject/.sabin/
+  config.json
+  tasks/open/SABIN-0012.md          # the task; filename is the stable ID
+  tasks/completed/
+  notes/SABIN-0012-add-telemetry/   # agent-readable context, plan.md lives here
+  prompts/SABIN-0012-add-telemetry.md   # your prompt scratchpad; agents are denied
+  hooks/completed.md                # instructions printed on `task update ... completed`
+  research/
+```
+
+The repo gets a `.sabin` link file pointing there, ignored via
+`.git/info/exclude`. One suffix, derived from the title, names the branch,
+worktree, notes directory and scratchpad alike:
+
+```
+SABIN-0012 "Add telemetry to uploads"
+  branch     angelo/SABIN-0012-add-telemetry-uploads
+  worktree   ../myproject-worktrees/SABIN-0012-add-telemetry-uploads
+  notes      notes/SABIN-0012-add-telemetry-uploads/
+```
+
+## Install
 
 ```bash
-cd packages/cli
-npm link
+git clone https://github.com/angelodipaolo/sabin.git && cd sabin
+npm install && npm run build
+(cd packages/cli && npm link)          # puts `sabin` on your PATH
+sabin skill install                    # ~/.claude/skills/sabin (or --agent codex)
 ```
 
-Now you can use the `sabin` command globally:
-```bash
-sabin --help
-```
-
-## Installation as Claude Code Plugin
-
-Sabin can be installed as a Claude Code plugin for seamless workflow integration.
-
-### Prerequisites
-
-1. Install the Sabin CLI:
-   ```bash
-   cd packages/cli
-   npm link
-   sabin --version  # Verify installation
-   ```
-
-2. Install Claude Code (if not already installed)
-
-### Plugin Installation
-
-From Claude Code:
-```bash
-# Add the Sabin marketplace (use absolute path to your Sabin repo)
-/plugin marketplace add /path/to/sabin
-
-# Install the plugin
-/plugin install sabin@sabin-local
-```
-
-### Available Plugin Commands
-
-- `/sabin-create` - Create a new task from requirements
-- `/sabin-plan` - Create an implementation plan for a task
-- `/sabin-implement` - Implement a task based on its plan
-- `/sabin-complete` - Complete and commit a task
-
-See `.claude-plugin/README.md` for detailed plugin documentation.
-
-**Note**: The plugin, CLI, and VS Code extension are separate installations that work together.
-
-## Installation as Codex Skill
-
-Sabin can be installed as a Codex skill for use across any project (global install).
-
-### Prerequisites
-
-- Codex installed and configured
-
-### Install via Skill Installer
-
-Use the Codex skill installer script to install from GitHub into `~/.codex/skills`:
+VS Code extension:
 
 ```bash
-python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo yourusername/sabin \
-  --path .codex/skills/sabin
+cd packages/vscode-extension && npx @vscode/vsce package
+code --install-extension sabin-vscode-0.1.0.vsix
 ```
 
-Then restart Codex to pick up the new skill.
+Set up a project from inside its repo:
 
-### Global Install (All Projects)
+```bash
+sabin init                             # asks where the Sabin directory goes and the ID prefix
+sabin init --shared ~/notes/myproject/.sabin -p MYPROJECT -b angelo   # or say it all at once
+```
 
-Codex loads global skills from `~/.codex/skills`. After installing, the Sabin skill is available in any project without adding repo-scoped files.
+## CLI
+
+```
+sabin init | link <path>               set up a repo
+sabin task create "<title>"            [-c body] [-n JIRA-123] [--open] [--json]
+sabin task list                        [-s status] [--all] [--json]
+sabin task show [id]
+sabin task update <id> <status>        prints hooks/<status>.md afterwards
+sabin start <ticket>[-suffix]          worktree + branch + notes, marks in_progress
+sabin run [ticket]                     start, then launch an agent in the worktree
+                                       [--claude|--codex|-a name] [--tab] [--print] [--no-start]
+sabin open [ticket]                    [--worktree|--notes|--prompt|--plan|--task|--sabin]
+sabin context --json                   the agent's orienting call
+sabin where [ticket]                   [--notes|--prompt|--plan|--worktree|--task|--sabin|--code-workspace]
+sabin notes new <name>                 [--template plan]
+sabin skill install                    [--agent claude|codex]
+```
+
+Tickets are inferred from the current branch when omitted. A branch with no
+ticket is an error, never a guess.
+
+## VS Code
+
+The Sabin activity bar has two views. **Workspace** shows the focused task -
+its scratchpad, task file and notes - above every open task grouped by status.
+Focus follows the checked-out branch until you click a task, which pins it.
+**Board** is the same tasks as cards with a status menu.
+
+- `⌥⌘T` focus a task (searchable by ID or title)
+- `⌥⌘P` open the focused task's prompt scratchpad
+- `⌥⌘L` open its plan
+
+Opened via `sabin open` (the generated `.code-workspace`), focusing a task also
+swaps the Explorer to that ticket's worktree and notes, so `Cmd+P` is scoped to
+what you are working on.
+
+## iTerm2
+
+`sabin run` names the tab after the ticket and sets it as the badge, so a row
+of agent tabs reads as tickets. `sabin run --tab` launches the agent in a new
+tab of the current window instead of taking over your shell. For a plain shell
+in a worktree:
+
+```bash
+scd() { cd "$(sabin where --worktree "$1")"; }
+```
 
 ## Configuration
 
-Sabin uses a configuration file at `.sabin/config.json` to customize project settings.
+`config.json` in the Sabin directory. Everything after `taskNumberPadding` is optional.
 
-### Project Prefix
-
-You can configure a custom prefix for auto-generated task IDs:
-
-```bash
-# Initialize with custom prefix
-sabin init --prefix MYPROJECT
-
-# Or initialize with default prefix (TASK)
-sabin init
-```
-
-The configuration file (`.sabin/config.json`) has the following structure:
 ```json
 {
-  "projectPrefix": "TASK",
-  "taskNumberPadding": 4
+  "projectPrefix": "MYPROJECT",
+  "taskNumberPadding": 4,
+  "branch":    { "prefix": "angelo", "template": "{prefix}/{ticket}-{slug}" },
+  "worktrees": { "root": "../myproject-worktrees", "postCreate": ["npm ci"] },
+  "slug":      { "from": "title", "maxLength": 32, "stopWords": true },
+  "agents":    { "default": "claude", "definitions": {} },
+  "editor":    "code"
 }
 ```
 
-**Examples:**
-- Default: `TASK-0001`, `TASK-0002`, etc.
-- Custom: `MYPROJECT-0001`, `MYPROJECT-0002`, etc.
-
-### Coding Agents
-
-`sabin run <ticket>` launches a coding agent already prompted with the task. `claude` and
-`codex` work out of the box; anything else is a few lines of config:
+`claude` and `codex` launch out of the box. Anything else is a definition;
+arguments may use `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` and
+`{taskFile}`, and `{prompt}` is appended when a definition never mentions it:
 
 ```json
-{
-  "agents": {
-    "default": "claude",
-    "definitions": {
-      "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
-      "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
-    }
+"agents": {
+  "default": "codex",
+  "definitions": {
+    "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
+    "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
   }
 }
 ```
 
-Each argument may contain `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` or `{taskFile}`.
-A definition that never mentions `{prompt}` gets it appended as the final argument, so
-`{ "command": "aider" }` on its own does the obvious thing.
+### Hooks
 
-### External Task IDs
+`hooks/<status>.md` holds project instructions for an agent moving a task to
+that status. `sabin task update` prints the file after the change lands, so
+it reaches the agent from the command it had to run anyway.
 
-You can link tasks from external systems (JIRA, Linear, Notion, etc.) by providing custom task IDs:
-
-```bash
-# Create task with external JIRA ID
-sabin task create -t "Fix authentication bug" -n JIRA-12345
-
-# Create task with Notion ID
-sabin task create -t "Architecture review" -n NTVARCH-23252
+```
+# hooks/completed.md
+Push the branch and open a pull request with `gh pr create --fill`.
 ```
 
-## Usage
+## Claude Code plugin
 
-### VS Code Extension
+The repo is also a Claude Code plugin that ships the skill:
 
-- View tasks organized by status in the sidebar
-- Create new tasks with the "New Task" button
-- Update task status by clicking on a task
-
-### CLI Commands
-
-The Sabin CLI provides file-based workflow commands that enable AI agents to manage their own task lifecycle. Agents can create tasks with sabin task create, track work across statuses (open → ready → review → completed) using sabin task update, and query current work with sabin task list. The file-based architecture using markdown with YAML frontmatter allows agents to both use structured CLI commands and directly read/write task files, giving them flexible programmatic access to the entire workflow state.
-
-```bash
-# Initialize project
-sabin init                           # Default prefix (TASK)
-sabin init --prefix MYPROJECT        # Custom prefix
-
-# Create a new task
-sabin task create -t "Title" -c "Content"
-sabin task create -t "Title" -n JIRA-123    # With external ID
-sabin task create                           # Interactive mode (prompts for input)
-
-# List all tasks
-sabin task list
-
-# List tasks by status
-sabin task list -s open
-
-# Update task status
-sabin task update TASK-0001 ready
-
-# Kick off an agent on a task: worktree, branch, status and prompt in one command
-sabin run TASK-0001                  # Default agent (claude)
-sabin run TASK-0001 --codex          # Or codex
-sabin run TASK-0001 -a aider         # Or anything configured
-sabin run TASK-0001 --print          # Just show the prompt, change nothing
+```
+/plugin marketplace add /path/to/sabin
+/plugin install sabin@sabin-local
 ```
 
 ## License

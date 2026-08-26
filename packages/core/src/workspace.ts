@@ -1,7 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { SabinConfig } from './types';
-import { currentBranch, mainWorktreeRoot, repoRoot } from './git';
+import { currentBranch, mainWorktreeRoot } from './git';
+import { parseTask } from './markdown';
+import { findTaskFile } from './tasks';
+import { pathExists } from './fs';
 
 export const DEFAULT_NOTES_DIR = 'notes';
 export const DEFAULT_PROMPTS_DIR = 'prompts';
@@ -252,12 +255,7 @@ export function planPath(notesDir: string): string {
  */
 export async function findPlan(notesDir: string): Promise<string | null> {
   const file = planPath(notesDir);
-  try {
-    await fs.access(file);
-    return file;
-  } catch {
-    return null;
-  }
+  return (await pathExists(file)) ? file : null;
 }
 
 /**
@@ -306,34 +304,6 @@ export async function findWorkspaceDir(root: string, ticket: string): Promise<st
 
   const prefixed = entries.filter(name => name.toUpperCase().startsWith(`${ticket.toUpperCase()}-`));
   return prefixed.length === 1 ? prefixed[0] : null;
-}
-
-/**
- * Locate a task file by ID across every tasks/<status> directory
- */
-export async function findTaskFile(sabinDir: string, ticket: string): Promise<string | null> {
-  const tasksDir = path.join(sabinDir, 'tasks');
-
-  let entries: string[];
-  try {
-    entries = (await fs.readdir(tasksDir, { withFileTypes: true }))
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name);
-  } catch {
-    return null;
-  }
-
-  for (const dir of entries) {
-    const candidate = path.join(tasksDir, dir, `${ticket}.md`);
-    try {
-      await fs.access(candidate);
-      return candidate;
-    } catch {
-      // Try the next status directory
-    }
-  }
-
-  return null;
 }
 
 export interface ResolveWorkspaceOptions {
@@ -398,34 +368,19 @@ async function resolveSlug(
 ): Promise<string | null> {
   if (override !== undefined && override !== null) return slugify(override);
 
-  if (taskFile) {
-    const recorded = await readTaskSlug(taskFile);
-    if (recorded) return recorded;
-  }
+  const task = taskFile ? await readTaskSafely(taskFile) : null;
+  if (task?.slug) return slugify(task.slug);
 
   if (parsed.slug) return parsed.slug;
 
   // An existing directory wins over derivation, so workspaces created before
   // title derivation was switched on keep resolving to their own paths
-  const title = taskFile ? await readTaskTitle(taskFile) : null;
-  return slugForTicket(parsed.ticket, null, title, sabinDir, config);
+  return slugForTicket(parsed.ticket, null, task?.title ?? null, sabinDir, config);
 }
 
-async function readTaskTitle(taskFile: string): Promise<string | null> {
+async function readTaskSafely(taskFile: string) {
   try {
-    const content = await fs.readFile(taskFile, 'utf8');
-    const match = content.match(/^title:\s*(.+)$/m);
-    return match ? match[1].trim().replace(/^['"]|['"]$/g, '') : null;
-  } catch {
-    return null;
-  }
-}
-
-async function readTaskSlug(taskFile: string): Promise<string | null> {
-  try {
-    const content = await fs.readFile(taskFile, 'utf8');
-    const match = content.match(/^slug:\s*(.+)$/m);
-    return match ? slugify(match[1].trim().replace(/^['"]|['"]$/g, '')) : null;
+    return await parseTask(taskFile);
   } catch {
     return null;
   }
@@ -442,13 +397,44 @@ export class NoTicketError extends Error {
   }
 }
 
-/**
- * Current worktree, when it is one of the repo's worktrees
- */
-export async function currentWorktree(cwd: string): Promise<string | null> {
-  return repoRoot(cwd);
-}
-
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const PROMPT_TEMPLATE = (name: string, title: string) =>
+  `# ${name} - ${title}\n\n` +
+  `Scratchpad for prompts. Not visible to the agent.\n\n---\n\n`;
+
+/**
+ * Turn "update-telemetry" back into "Update telemetry" for a task title
+ */
+export function titleFromSlug(slug: string): string {
+  const words = slug.replace(/-/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Create the notes directory and prompt scratchpad for a ticket.
+ *
+ * Independent of status and worktrees: a task gets its notes directory the
+ * moment it exists, so context can accumulate before any work starts.
+ * Returns the paths this call created, as opposed to found.
+ */
+export async function scaffoldWorkspace(
+  paths: Pick<WorkspacePaths, 'name' | 'notesDir' | 'promptFile'>,
+  title: string,
+  created: string[] = []
+): Promise<string[]> {
+  if (!(await pathExists(paths.notesDir))) {
+    await fs.mkdir(paths.notesDir, { recursive: true });
+    created.push(paths.notesDir);
+  }
+
+  if (!(await pathExists(paths.promptFile))) {
+    await fs.mkdir(path.dirname(paths.promptFile), { recursive: true });
+    await fs.writeFile(paths.promptFile, PROMPT_TEMPLATE(paths.name, title));
+    created.push(paths.promptFile);
+  }
+
+  return created;
 }

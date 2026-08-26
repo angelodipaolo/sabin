@@ -1,4 +1,3 @@
-import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import chalk from 'chalk';
 import {
@@ -6,6 +5,7 @@ import {
   resolveAgent,
   agentArgv,
   buildTaskPrompt,
+  pathExists,
   UnknownAgentError,
   AgentDefinition,
   ResolvedAgent,
@@ -13,6 +13,7 @@ import {
 } from '@sabin/core';
 import { getWorkspace, fail } from '../workspace-context';
 import { ensureWorkspace } from '../workspace-start';
+import { isITerm, labelTab, openTab, shellQuote } from '../iterm';
 
 interface RunOptions {
   agent?: string;
@@ -20,6 +21,7 @@ interface RunOptions {
   codex?: boolean;
   print?: boolean;
   start?: boolean;
+  tab?: boolean;
 }
 
 /**
@@ -28,7 +30,8 @@ interface RunOptions {
  * The agent runs in the foreground with its cwd set to the ticket's worktree,
  * which is what makes this a one-command kickoff: no `cd`, no shell wrapper -
  * the child is simply born in the right directory, and when it exits you are
- * back where you started.
+ * back where you started. `--tab` does the same in a fresh iTerm2 tab so the
+ * shell you typed it in stays yours.
  */
 export async function runAgent(ticketArg: string | undefined, options: RunOptions): Promise<void> {
   const { workspace, config } = await getWorkspace(ticketArg);
@@ -38,7 +41,7 @@ export async function runAgent(ticketArg: string | undefined, options: RunOption
   if (!workspace.taskFile) {
     fail(
       `No task found for ${workspace.ticket}.\n` +
-      `Create it first:  sabin task create -n ${workspace.ticket} -t "<title>"`
+      `Create it first:  sabin task create "<title>" -n ${workspace.ticket}`
     );
   }
 
@@ -64,6 +67,16 @@ export async function runAgent(ticketArg: string | undefined, options: RunOption
     : await ensureWorkspace(ticketArg ?? workspace.ticket);
 
   const cwd = started?.worktreeDir ?? (await workingDirectory(workspace.worktreeDir, workspace.mainRoot));
+
+  if (options.tab) {
+    if (!isITerm()) fail('--tab needs iTerm2 (TERM_PROGRAM is not iTerm.app).');
+    // The workspace is already started, so the tab only has to launch
+    const argv = ['sabin', 'run', workspace.ticket, '--no-start', '--agent', agent.name].map(shellQuote);
+    await openTab(cwd, argv.join(' '));
+    console.error(chalk.gray(`▸ ${agent.name} on ${workspace.ticket} in a new tab`));
+    return;
+  }
+
   const argv = agentArgv(agent.definition, {
     prompt,
     ticket: workspace.ticket,
@@ -72,6 +85,7 @@ export async function runAgent(ticketArg: string | undefined, options: RunOption
     taskFile: workspace.taskFile
   });
 
+  labelTab(workspace.name, workspace.ticket);
   console.error(chalk.gray(`▸ ${agent.name} in ${cwd}`));
 
   await launch(agent.definition, argv, cwd);
@@ -93,12 +107,7 @@ function chooseAgent(options: RunOptions, config: SabinConfig): ResolvedAgent {
  * ticket's worktree if it happens to exist, otherwise the repo itself.
  */
 async function workingDirectory(worktreeDir: string, mainRoot: string | null): Promise<string> {
-  try {
-    await fs.access(worktreeDir);
-    return worktreeDir;
-  } catch {
-    return mainRoot ?? process.cwd();
-  }
+  return (await pathExists(worktreeDir)) ? worktreeDir : mainRoot ?? process.cwd();
 }
 
 function launch(definition: AgentDefinition, argv: string[], cwd: string): Promise<void> {

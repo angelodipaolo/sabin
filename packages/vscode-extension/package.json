@@ -28,7 +28,7 @@
       },
       {
         "command": "sabin.refreshTasks",
-        "title": "Sabin: Refresh Tasks",
+        "title": "Sabin: Refresh",
         "icon": "$(refresh)"
       },
       {
@@ -37,14 +37,29 @@
         "icon": "$(target)"
       },
       {
+        "command": "sabin.openTask",
+        "title": "Sabin: Open Task File",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "sabin.openPlan",
+        "title": "Sabin: Open Plan",
+        "icon": "$(book)"
+      },
+      {
         "command": "sabin.openPrompt",
-        "title": "Sabin: Open Prompt for Current Task",
+        "title": "Sabin: Open Prompt Scratchpad",
         "icon": "$(edit)"
       },
       {
         "command": "sabin.openWorktree",
         "title": "Sabin: Open Worktree in New Window",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "sabin.newNote",
+        "title": "Sabin: New Note",
+        "icon": "$(new-file)"
       },
       {
         "command": "sabin.unpinTask",
@@ -55,11 +70,6 @@
         "command": "sabin.openProjectWorkspace",
         "title": "Sabin: Reopen as Sabin Workspace",
         "icon": "$(window)"
-      },
-      {
-        "command": "sabin.newNote",
-        "title": "Sabin: New Note",
-        "icon": "$(new-file)"
       }
     ],
     "viewsContainers": {
@@ -124,13 +134,25 @@
           "group": "inline@1"
         },
         {
-          "command": "sabin.openWorktree",
+          "command": "sabin.openPlan",
           "when": "view == sabin.workspaceView && viewItem == sabinFocused",
           "group": "inline@2"
+        },
+        {
+          "command": "sabin.openWorktree",
+          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
+          "group": "inline@3"
         }
       ]
     },
     "keybindings": [
+      {
+        "command": "sabin.focusTask",
+        "key": "alt+cmd+t",
+        "mac": "alt+cmd+t",
+        "win": "alt+ctrl+t",
+        "linux": "alt+ctrl+t"
+      },
       {
         "command": "sabin.openPrompt",
         "key": "alt+cmd+p",
@@ -139,11 +161,11 @@
         "linux": "alt+ctrl+p"
       },
       {
-        "command": "sabin.focusTask",
-        "key": "alt+cmd+t",
-        "mac": "alt+cmd+t",
-        "win": "alt+ctrl+t",
-        "linux": "alt+ctrl+t"
+        "command": "sabin.openPlan",
+        "key": "alt+cmd+l",
+        "mac": "alt+cmd+l",
+        "win": "alt+ctrl+l",
+        "linux": "alt+ctrl+l"
       }
     ]
   },
@@ -161,8 +183,7 @@
   },
   "dependencies": {
     "@sabin/core": "^0.1.0",
-    "@vscode/codicons": "^0.0.40",
-    "gray-matter": "^4.0.3"
+    "@vscode/codicons": "^0.0.40"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

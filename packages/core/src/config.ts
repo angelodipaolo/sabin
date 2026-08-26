@@ -7,46 +7,40 @@ const DEFAULT_CONFIG: SabinConfig = {
   taskNumberPadding: 4
 };
 
-/**
- * Get the path to the config file
- */
-function getConfigPath(sabinDir: string = '.sabin'): string {
+export function configPath(sabinDir: string): string {
   return path.join(sabinDir, 'config.json');
 }
 
 /**
- * Read the config file, returning default config if it doesn't exist
+ * Read config.json, layered over the defaults.
+ *
+ * A missing file means defaults. A file that cannot be parsed is an error,
+ * not a silent fallback - defaulting the prefix because of a stray comma
+ * would allocate task IDs under the wrong name.
  */
-export async function readConfig(sabinDir: string = '.sabin'): Promise<SabinConfig> {
-  const configPath = getConfigPath(sabinDir);
+export async function readConfig(sabinDir: string): Promise<SabinConfig> {
+  const file = configPath(sabinDir);
+
+  let content: string;
+  try {
+    content = await fs.readFile(file, 'utf8');
+  } catch (error: any) {
+    if (error.code === 'ENOENT') return { ...DEFAULT_CONFIG };
+    throw error;
+  }
 
   try {
-    const content = await fs.readFile(configPath, 'utf8');
-    const config = JSON.parse(content);
-
-    // Merge with defaults to handle missing fields
-    return {
-      ...DEFAULT_CONFIG,
-      ...config
-    };
-  } catch (error) {
-    // If file doesn't exist or can't be read, return default config
-    return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG, ...JSON.parse(content) };
+  } catch (error: any) {
+    throw new Error(`Could not parse ${file}: ${error.message}`);
   }
 }
 
-/**
- * Write the config file
- */
-export async function writeConfig(config: SabinConfig, sabinDir: string = '.sabin'): Promise<void> {
-  const configPath = getConfigPath(sabinDir);
-  const content = JSON.stringify(config, null, 2);
-  await fs.writeFile(configPath, content);
+export async function writeConfig(config: SabinConfig, sabinDir: string): Promise<void> {
+  await fs.mkdir(sabinDir, { recursive: true });
+  await fs.writeFile(configPath(sabinDir), `${JSON.stringify(config, null, 2)}\n`);
 }
 
-/**
- * Get the default config
- */
 export function getDefaultConfig(): SabinConfig {
   return { ...DEFAULT_CONFIG };
 }

@@ -5,30 +5,27 @@ import { updateStatus } from './commands/update-status';
 import { listTasks } from './commands/list-tasks';
 import { initProject } from './commands/init';
 import { linkToSharedSabin } from './commands/link';
-import { installPrompts } from './commands/install-prompts';
+import { installSkill } from './commands/install-skill';
 import { showContext } from './commands/context';
 import { where } from './commands/where';
 import { showTask } from './commands/show-task';
 import { startTask } from './commands/start';
-import { finishTask } from './commands/finish';
 import { runAgent } from './commands/run';
 import { notesNew } from './commands/notes';
 import { open } from './commands/open';
-import { draft } from './commands/draft';
 
 const program = new Command();
 
 program
   .name('sabin')
-  .description('Workflow management CLI for agentic coding')
+  .description('Worktree command center for agentic coding')
   .version('0.1.0');
 
 program
   .command('init')
-  .description('Initialize Sabin in current directory')
+  .description('Set up Sabin for the repo you are in')
   .option('-p, --prefix <prefix>', 'Project prefix for task IDs')
-  .option('-s, --shared <path>', 'Create or reuse a shared .sabin at this path and link to it')
-  .option('--local', 'Keep .sabin inside the repo (skips the prompt)')
+  .option('-s, --shared <path>', 'Where the Sabin directory lives (outside the repo)')
   .option('-b, --branch-prefix <prefix>', 'Personal branch prefix, e.g. angelo')
   .option('-w, --worktrees <path>', 'Worktree root, relative to the repo')
   .option('--no-exclude', 'Do not add .sabin to .git/info/exclude')
@@ -36,19 +33,9 @@ program
 
 program
   .command('link')
-  .description('Link to a shared .sabin directory')
-  .argument('<path>', 'Path to shared .sabin directory')
+  .description('Point this repo at an existing Sabin directory')
+  .argument('<path>', 'Path to the Sabin directory')
   .action(linkToSharedSabin);
-
-program
-  .command('draft')
-  .description('Create a ticket\'s notes directory and prompt scratchpad, without starting work')
-  .argument('[ticket]', 'Ticket, optionally with a description (inferred from the branch if omitted)')
-  .option('-t, --title <title>', 'Task title, when creating the task')
-  .option('--no-open', 'Do not open the scratchpad in your editor')
-  .option('-e, --editor <command>', 'Editor command (default: code)')
-  .option('--json', 'Output machine-readable JSON')
-  .action(draft);
 
 program
   .command('start')
@@ -66,17 +53,10 @@ program
   .option('-a, --agent <name>', 'Agent to launch (default: claude)')
   .option('--claude', 'Shorthand for --agent claude')
   .option('--codex', 'Shorthand for --agent codex')
+  .option('--tab', 'Launch in a new iTerm2 tab instead of this one')
   .option('--print', 'Print the composed prompt and exit, without starting anything')
   .option('--no-start', 'Do not create the worktree or change status first')
   .action(runAgent);
-
-program
-  .command('finish')
-  .description('Mark a ticket completed and remove its worktree')
-  .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
-  .option('--keep-worktree', 'Leave the worktree in place')
-  .option('--json', 'Output machine-readable JSON')
-  .action(finishTask);
 
 program
   .command('open')
@@ -85,7 +65,9 @@ program
   .option('--worktree', "Open the ticket's worktree instead")
   .option('--notes', "Open the ticket's notes directory instead")
   .option('--prompt', "Open the ticket's prompt scratchpad instead")
-  .option('--sabin', 'Open the .sabin directory instead')
+  .option('--plan', "Open the ticket's plan instead")
+  .option('--task', 'Open the task file instead')
+  .option('--sabin', 'Open the Sabin directory instead')
   .option('-n, --new-window', 'Force a new editor window')
   .option('-e, --editor <command>', 'Editor command (default: code)')
   .action(open);
@@ -103,9 +85,10 @@ program
   .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
   .option('--notes', 'Path to the ticket notes directory (default)')
   .option('--prompt', 'Path to the ticket prompt scratchpad')
+  .option('--plan', 'Path to the ticket plan')
   .option('--worktree', 'Path to the ticket worktree')
   .option('--task', 'Path to the task file')
-  .option('--sabin', 'Path to the resolved .sabin directory')
+  .option('--sabin', 'Path to the resolved Sabin directory')
   .option('--code-workspace', 'Path to the project VS Code workspace file')
   .action(where);
 
@@ -115,16 +98,20 @@ const task = program
 
 task
   .command('create')
-  .description('Create a new task')
-  .option('-t, --title <title>', 'Task title')
-  .option('-c, --content <content>', 'Task content')
-  .option('-n, --number <number>', 'Custom task ID (e.g., JIRA-12345, NTVARCH-23252, or numeric)')
+  .description('Create a task, with its notes directory and prompt scratchpad')
+  .argument('[title]', 'Task title')
+  .option('-t, --title <title>', 'Task title (alternative to the argument)')
+  .option('-c, --content <content>', 'Task body')
+  .option('-n, --number <id>', 'Explicit ID, e.g. JIRA-12345 (default: next in sequence)')
   .option('--slug <slug>', 'Descriptive suffix for branch, notes and worktree names')
+  .option('-o, --open', 'Open the task file in your editor to write the requirements')
+  .option('-e, --editor <command>', 'Editor command (default: code)')
+  .option('--json', 'Output machine-readable JSON')
   .action(createTask);
 
 task
   .command('update <id> <status>')
-  .description('Update task status')
+  .description('Change task status; prints the project hook for that status, if any')
   .option('--json', 'Output machine-readable JSON')
   .action(updateStatus);
 
@@ -136,8 +123,10 @@ task
 
 task
   .command('list')
-  .description('List all tasks')
+  .description('List tasks (completed hidden unless --all or -s completed)')
   .option('-s, --status <status>', 'Filter by status (open/ready/in_progress/review/completed)')
+  .option('-a, --all', 'Include completed tasks')
+  .option('--json', 'Output machine-readable JSON')
   .action(listTasks);
 
 const notes = program
@@ -152,15 +141,22 @@ notes
   .option('-t, --ticket <ticket>', 'Override branch inference')
   .action(notesNew);
 
-const prompts = program
-  .command('prompts')
-  .description('Manage AI agent prompts');
+const skill = program
+  .command('skill')
+  .description('Manage the agent skill');
 
-prompts
+skill
   .command('install')
-  .description('Install Sabin workflow prompts as slash commands for AI coding agents')
-  .option('-a, --agent <agent>', 'Target agent (default: claude)', 'claude')
-  .action(installPrompts);
+  .description('Install the sabin skill for an agent (claude or codex)')
+  .option('-a, --agent <agent>', 'Target agent', 'claude')
+  .action(installSkill);
+
+// Kept for muscle memory; `skill install` is the name
+program
+  .command('prompts', { hidden: true })
+  .command('install')
+  .option('-a, --agent <agent>', 'Target agent', 'claude')
+  .action(installSkill);
 
 program.parse();
 

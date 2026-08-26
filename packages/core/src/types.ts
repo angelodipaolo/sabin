@@ -1,9 +1,18 @@
+export const TASK_STATUSES = ['open', 'ready', 'in_progress', 'review', 'completed'] as const;
+
+export type TaskStatus = typeof TASK_STATUSES[number];
+
+export function isTaskStatus(value: string): value is TaskStatus {
+  return (TASK_STATUSES as readonly string[]).includes(value);
+}
+
 export interface Task {
-  status: 'open' | 'ready' | 'in_progress' | 'review' | 'completed' | 'resolved';
+  /** Ticket ID, e.g. SABIN-0004 - always the file's basename */
+  id: string;
+  status: TaskStatus;
   title: string;
   /** Descriptive suffix used for branch, notes and worktree names */
   slug?: string;
-  workingDir?: string;
   branch?: string;
   worktree?: string;
   content: string;
@@ -56,6 +65,8 @@ export interface SabinConfig {
   worktrees?: WorktreeConfig;
   slug?: SlugConfig;
   agents?: AgentsConfig;
+  /** Editor command for `sabin open` (default: code) */
+  editor?: string;
   /** Relative to the resolved .sabin directory */
   notesDir?: string;
   /** Relative to the resolved .sabin directory */
