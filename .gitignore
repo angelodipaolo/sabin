@@ -87,3 +87,6 @@ desktop.ini
 
 # Notes
 .notes
+
+# Prompt scratchpads are personal, even when .sabin is committed
+.sabin/prompts/
