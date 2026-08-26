@@ -1,0 +1,229 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
+
+type NodeKind = 'focused' | 'prompt' | 'note' | 'notesEmpty' | 'group' | 'task' | 'empty';
+
+export class WorkspaceNode extends vscode.TreeItem {
+  constructor(
+    label: string,
+    public readonly kind: NodeKind,
+    collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly workspace?: TaskWorkspace,
+    public readonly filePath?: string
+  ) {
+    super(label, collapsibleState);
+  }
+}
+
+const STATUS_ORDER = ['in_progress', 'review', 'ready', 'open', 'completed', 'resolved'];
+
+const STATUS_LABELS: Record<string, string> = {
+  in_progress: 'In progress',
+  review: 'In review',
+  ready: 'Ready',
+  open: 'Open',
+  completed: 'Completed',
+  resolved: 'Resolved'
+};
+
+/**
+ * Tree showing the focused task's own files above the rest of the board.
+ *
+ * The focused task follows the checked-out branch unless it has been pinned
+ * by clicking another task - a tree that drifts out of sync with what you are
+ * looking at becomes a second thing to navigate rather than a replacement.
+ */
+export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceNode> {
+  private changed = new vscode.EventEmitter<WorkspaceNode | undefined>();
+  readonly onDidChangeTreeData = this.changed.event;
+
+  private workspaces: TaskWorkspace[] = [];
+  private focusedTicket: string | null = null;
+  private pinned = false;
+
+  constructor(private service: WorkspaceService) {}
+
+  public refresh(): void {
+    this.changed.fire(undefined);
+  }
+
+  public async focus(ticket: string, pin = true): Promise<void> {
+    this.focusedTicket = ticket;
+    this.pinned = pin;
+    this.refresh();
+  }
+
+  public unpin(): void {
+    this.pinned = false;
+    this.refresh();
+  }
+
+  public isPinned(): boolean {
+    return this.pinned;
+  }
+
+  public focused(): TaskWorkspace | undefined {
+    return this.workspaces.find(w => w.ticket === this.focusedTicket);
+  }
+
+  public find(ticket: string): TaskWorkspace | undefined {
+    return this.workspaces.find(w => w.ticket === ticket);
+  }
+
+  getTreeItem(element: WorkspaceNode): vscode.TreeItem {
+    return element;
+  }
+
+  async getChildren(element?: WorkspaceNode): Promise<WorkspaceNode[]> {
+    if (!element) {
+      return this.rootNodes();
+    }
+
+    if (element.kind === 'focused' && element.workspace) {
+      return this.focusedChildren(element.workspace);
+    }
+
+    if (element.kind === 'group') {
+      return this.taskNodes(element.label as string);
+    }
+
+    return [];
+  }
+
+  private async rootNodes(): Promise<WorkspaceNode[]> {
+    try {
+      this.workspaces = await this.service.listWorkspaces();
+    } catch (error) {
+      return [new WorkspaceNode(`Could not read .sabin: ${error}`, 'empty', vscode.TreeItemCollapsibleState.None)];
+    }
+
+    if (this.workspaces.length === 0) {
+      return [new WorkspaceNode('No tasks yet', 'empty', vscode.TreeItemCollapsibleState.None)];
+    }
+
+    // Branch wins unless the user explicitly clicked a different task
+    if (!this.pinned) {
+      const roots = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+      const fromBranch = await this.service.currentTicket(roots);
+      if (fromBranch) this.focusedTicket = fromBranch;
+    }
+
+    const nodes: WorkspaceNode[] = [];
+    const focused = this.focused();
+
+    if (focused) {
+      const node = new WorkspaceNode(
+        focused.name,
+        'focused',
+        vscode.TreeItemCollapsibleState.Expanded,
+        focused
+      );
+      node.description = `${STATUS_LABELS[focused.status] ?? focused.status}${this.pinned ? ' · pinned' : ''}`;
+      node.tooltip = new vscode.MarkdownString(
+        `**${focused.title}**\n\n` +
+        `Branch: \`${focused.branch ?? '—'}\`\n\n` +
+        `Worktree: \`${focused.worktreeDir}\``
+      );
+      node.iconPath = new vscode.ThemeIcon(this.pinned ? 'pinned' : 'target');
+      node.contextValue = 'sabinFocused';
+      nodes.push(node);
+    }
+
+    const present = new Set(this.workspaces.map(w => w.status));
+    for (const status of STATUS_ORDER) {
+      if (!present.has(status)) continue;
+      if (status === 'completed' || status === 'resolved') continue;
+
+      const group = new WorkspaceNode(
+        STATUS_LABELS[status] ?? status,
+        'group',
+        vscode.TreeItemCollapsibleState.Expanded
+      );
+      group.contextValue = 'sabinGroup';
+      nodes.push(group);
+    }
+
+    return nodes;
+  }
+
+  private async focusedChildren(workspace: TaskWorkspace): Promise<WorkspaceNode[]> {
+    const nodes: WorkspaceNode[] = [];
+
+    const prompt = new WorkspaceNode(
+      path.basename(workspace.promptFile),
+      'prompt',
+      vscode.TreeItemCollapsibleState.None,
+      workspace,
+      workspace.promptFile
+    );
+    prompt.description = 'prompt scratchpad';
+    prompt.iconPath = new vscode.ThemeIcon('edit');
+    prompt.command = openFile(workspace.promptFile);
+    nodes.push(prompt);
+
+    const task = new WorkspaceNode(
+      path.basename(workspace.taskFile),
+      'note',
+      vscode.TreeItemCollapsibleState.None,
+      workspace,
+      workspace.taskFile
+    );
+    task.description = 'task';
+    task.iconPath = new vscode.ThemeIcon('checklist');
+    task.command = openFile(workspace.taskFile);
+    nodes.push(task);
+
+    const notes = await this.service.notesFor(workspace);
+    if (notes.length === 0) {
+      const empty = new WorkspaceNode('No notes yet', 'notesEmpty', vscode.TreeItemCollapsibleState.None);
+      empty.iconPath = new vscode.ThemeIcon('note');
+      nodes.push(empty);
+    } else {
+      for (const note of notes) {
+        const filePath = path.join(workspace.notesDir, note);
+        const item = new WorkspaceNode(note, 'note', vscode.TreeItemCollapsibleState.None, workspace, filePath);
+        item.iconPath = new vscode.ThemeIcon('markdown');
+        item.command = openFile(filePath);
+        nodes.push(item);
+      }
+    }
+
+    return nodes;
+  }
+
+  private taskNodes(groupLabel: string): WorkspaceNode[] {
+    const status = Object.keys(STATUS_LABELS).find(key => STATUS_LABELS[key] === groupLabel) ?? groupLabel;
+
+    return this.workspaces
+      .filter(w => w.status === status)
+      .sort((a, b) => a.ticket.localeCompare(b.ticket))
+      .map(workspace => {
+        const node = new WorkspaceNode(
+          workspace.ticket,
+          'task',
+          vscode.TreeItemCollapsibleState.None,
+          workspace
+        );
+        node.description = workspace.title;
+        node.iconPath = new vscode.ThemeIcon(
+          workspace.ticket === this.focusedTicket ? 'circle-filled' : 'circle-outline'
+        );
+        node.contextValue = 'sabinTask';
+        node.command = {
+          command: 'sabin.focusTask',
+          title: 'Focus task',
+          arguments: [workspace.ticket]
+        };
+        return node;
+      });
+  }
+}
+
+function openFile(filePath: string): vscode.Command {
+  return {
+    command: 'vscode.open',
+    title: 'Open',
+    arguments: [vscode.Uri.file(filePath)]
+  };
+}

@@ -205,7 +205,19 @@ Located in `packages/vscode-extension/src/`:
   - `fileWatcher.ts`: Watches `.sabin` directory for changes
 
 **Activation**: Triggers when workspace contains `.sabin` directory
-**Views**: Activity bar view and Explorer view showing tasks organized by status
+**Views**:
+- `sabin.workspaceView` (tree) - the focused task with its prompt file, task file and notes, above the
+  task list grouped by status. Focus follows the checked-out branch until you click another task,
+  which pins it; "Sabin: Follow Current Branch" unpins.
+- `sabin.tasksView` (webview) - the board
+
+**Commands**: `sabin.focusTask` (`⌥⌘T`), `sabin.openPrompt` (`⌥⌘P`), `sabin.openWorktree`,
+`sabin.unpinTask`, `sabin.newTask`, `sabin.refreshTasks`
+
+**Folder swapping**: focusing a task swaps the window's folders to that ticket's code and notes via
+`updateWorkspaceFolders()`, which scopes Cmd+P to the focused ticket. Requires the window to be opened
+on the generated `.code-workspace` file - VS Code restarts the extension host when folder 0 changes or
+when a plain folder window becomes multi-root, so swapping only happens from index 1 upward.
 **Bundling**: Uses esbuild to bundle all dependencies into `dist/extension.js` (68KB minified)
 
 ## TypeScript Configuration

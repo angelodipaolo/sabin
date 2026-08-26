@@ -1,5 +1,5 @@
 ---
-status: open
+status: review
 title: VS Code task workspace UI
 plan: .sabin/plans/SABIN-0002-task-workspaces.md
 ---

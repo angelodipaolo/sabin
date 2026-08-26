@@ -10,6 +10,7 @@ import {
   getDefaultConfig,
   checkSabinType,
   writeSabinLink,
+  writeCodeWorkspace,
   isGitRepo,
   git,
   SabinConfig
@@ -52,6 +53,9 @@ export async function initProject(options: InitOptions): Promise<void> {
       await writeConfig(config, sabinDir);
     }
 
+    // The extension swaps ticket folders inside this workspace file
+    const codeWorkspace = await writeCodeWorkspace(sabinDir, projectRoot);
+
     // A shared directory lives outside the repo, so the repo needs a pointer
     let excluded = false;
     if (isShared) {
@@ -62,7 +66,7 @@ export async function initProject(options: InitOptions): Promise<void> {
     }
 
     spinner.succeed(chalk.green(alreadySetUp ? 'Linked to shared .sabin' : 'Sabin initialized'));
-    await report(sabinDir, projectRoot, isShared, alreadySetUp, excluded);
+    await report(sabinDir, projectRoot, isShared, alreadySetUp, excluded, codeWorkspace);
   } catch (error: any) {
     if (error?.name === 'ExitPromptError') {
       console.error(chalk.yellow('\nCancelled'));
@@ -198,7 +202,8 @@ async function report(
   projectRoot: string,
   isShared: boolean,
   alreadySetUp: boolean,
-  excluded: boolean
+  excluded: boolean,
+  codeWorkspace: string
 ): Promise<void> {
   const config = await readConfig(sabinDir);
 
@@ -220,7 +225,10 @@ async function report(
   }
 
   const example = `${config.projectPrefix}-0001-my-first-change`;
-  console.log(chalk.gray(`\nStart working:\n  sabin start ${example}\n`));
+  console.log(chalk.gray('\nStart working:'));
+  console.log(chalk.gray(`  sabin start ${example}`));
+  console.log(chalk.gray('\nOpen the board, notes and prompts in VS Code:'));
+  console.log(chalk.gray(`  code ${JSON.stringify(tildify(codeWorkspace))}\n`));
 }
 
 function defaultPrefix(projectRoot: string): string {

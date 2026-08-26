@@ -3,6 +3,9 @@ import * as path from 'path';
 import { SabinWebviewProvider } from './providers/webviewProvider';
 import { SabinFileWatcher } from './watchers/fileWatcher';
 import { TaskService } from './services/taskService';
+import { WorkspaceService } from './services/workspaceService';
+import { WorkspaceTreeProvider } from './providers/workspaceProvider';
+import { focusFolders } from './services/workspaceFolders';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Sabin extension is now active!');
@@ -24,10 +27,25 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Workspace view: the focused task's own files, above the board
+  const workspaceService = new WorkspaceService(workspaceRoot);
+  const workspaceTree = new WorkspaceTreeProvider(workspaceService);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('sabin.workspaceView', workspaceTree)
+  );
+
   const fileWatcher = new SabinFileWatcher(() => {
     provider.refresh();
+    workspaceTree.refresh();
   });
   context.subscriptions.push(fileWatcher);
+
+  // Focus follows the branch, so a checkout in any root updates the view
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceTree.refresh())
+  );
+
+  registerWorkspaceCommands(context, workspaceService, workspaceTree);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('sabin.newTask', async () => {
@@ -48,9 +66,89 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('sabin.refreshTasks', () => {
       provider.refresh();
-      vscode.window.showInformationMessage('Tasks refreshed');
+      workspaceService.invalidate();
+      workspaceTree.refresh();
     })
   );
+}
+
+function registerWorkspaceCommands(
+  context: vscode.ExtensionContext,
+  service: WorkspaceService,
+  tree: WorkspaceTreeProvider
+) {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.focusTask', async (ticket?: string) => {
+      const target = ticket ?? await pickTicket(service);
+      if (!target) return;
+
+      await tree.focus(target);
+
+      const workspace = tree.find(target);
+      if (!workspace) return;
+
+      const result = focusFolders(workspace);
+      if (result === 'unsupported') {
+        vscode.window.showInformationMessage(
+          'Open the project\'s .code-workspace file to let Sabin swap folders when you switch tasks.'
+        );
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.openPrompt', async () => {
+      const workspace = tree.focused();
+      if (!workspace) {
+        vscode.window.showWarningMessage('No task is focused.');
+        return;
+      }
+
+      // The scratchpad is created lazily, so an unstarted task has none yet
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(workspace.promptFile));
+      } catch {
+        const dir = vscode.Uri.file(path.dirname(workspace.promptFile));
+        await vscode.workspace.fs.createDirectory(dir);
+        await vscode.workspace.fs.writeFile(
+          vscode.Uri.file(workspace.promptFile),
+          Buffer.from(`# ${workspace.name} - ${workspace.title}\n\n`)
+        );
+      }
+
+      const document = await vscode.workspace.openTextDocument(workspace.promptFile);
+      await vscode.window.showTextDocument(document);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.openWorktree', async (arg?: { ticket?: string }) => {
+      const workspace = arg?.ticket ? tree.find(arg.ticket) : tree.focused();
+      if (!workspace) return;
+
+      await vscode.commands.executeCommand(
+        'vscode.openFolder',
+        vscode.Uri.file(workspace.worktreeDir),
+        { forceNewWindow: true }
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sabin.unpinTask', () => tree.unpin())
+  );
+}
+
+async function pickTicket(service: WorkspaceService): Promise<string | undefined> {
+  const workspaces = await service.listWorkspaces();
+  const active = workspaces.filter(w => w.status !== 'completed' && w.status !== 'resolved');
+
+  const choice = await vscode.window.showQuickPick(
+    active.map(w => ({ label: w.ticket, description: w.title, detail: w.name })),
+    { placeHolder: 'Focus a task' }
+  );
+
+  return choice?.label;
 }
 
 async function createNewTask(taskService: TaskService) {

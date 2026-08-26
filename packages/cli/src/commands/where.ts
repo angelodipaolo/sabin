@@ -1,3 +1,4 @@
+import { codeWorkspacePath } from '@sabin/core';
 import { getWorkspace, fail } from '../workspace-context';
 
 interface WhereOptions {
@@ -6,6 +7,7 @@ interface WhereOptions {
   worktree?: boolean;
   task?: boolean;
   sabin?: boolean;
+  codeWorkspace?: boolean;
 }
 
 /**
@@ -14,11 +16,11 @@ interface WhereOptions {
 export async function where(ticket: string | undefined, options: WhereOptions): Promise<void> {
   const { workspace } = await getWorkspace(ticket);
 
-  const selected = (['notes', 'prompt', 'worktree', 'task', 'sabin'] as const)
+  const selected = (['notes', 'prompt', 'worktree', 'task', 'sabin', 'codeWorkspace'] as const)
     .filter(key => options[key]);
 
   if (selected.length > 1) {
-    fail(`Pass at most one of --notes, --prompt, --worktree, --task, --sabin`);
+    fail('Pass at most one of --notes, --prompt, --worktree, --task, --sabin, --code-workspace');
   }
 
   switch (selected[0] ?? 'notes') {
@@ -33,6 +35,9 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
       break;
     case 'sabin':
       console.log(workspace.sabinDir);
+      break;
+    case 'codeWorkspace':
+      console.log(codeWorkspacePath(workspace.sabinDir, workspace.mainRoot ?? process.cwd()));
       break;
     case 'task':
       if (!workspace.taskFile) fail(`No task file found for ${workspace.ticket}`);

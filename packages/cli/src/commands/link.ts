@@ -3,7 +3,7 @@ import path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { confirm } from '@inquirer/prompts';
-import { writeSabinLink, checkSabinType } from '@sabin/core';
+import { writeSabinLink, writeCodeWorkspace, checkSabinType } from '@sabin/core';
 
 export async function linkToSharedSabin(targetPath: string): Promise<void> {
   const spinner = ora('Linking to shared .sabin...').start();
@@ -59,10 +59,12 @@ export async function linkToSharedSabin(targetPath: string): Promise<void> {
 
     // Create .sabin link file
     await writeSabinLink(projectRoot, resolvedTarget);
+    const codeWorkspace = await writeCodeWorkspace(resolvedTarget, projectRoot);
 
     spinner.succeed(chalk.green('Successfully linked to shared .sabin'));
     console.log(chalk.gray(`Target: ${resolvedTarget}`));
     console.log(chalk.gray(`Link file: ${path.join(projectRoot, '.sabin')}`));
+    console.log(chalk.gray(`Workspace: ${codeWorkspace}`));
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to link to shared .sabin'));
     console.error(chalk.red(error.message));

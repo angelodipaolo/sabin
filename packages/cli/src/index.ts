@@ -70,6 +70,7 @@ program
   .option('--worktree', 'Path to the ticket worktree')
   .option('--task', 'Path to the task file')
   .option('--sabin', 'Path to the resolved .sabin directory')
+  .option('--code-workspace', 'Path to the project VS Code workspace file')
   .action(where);
 
 const task = program

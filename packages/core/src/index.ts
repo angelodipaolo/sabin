@@ -7,3 +7,4 @@ export * from './workingDir';
 export * from './git';
 export * from './lock';
 export * from './workspace';
+export * from './codeWorkspace';

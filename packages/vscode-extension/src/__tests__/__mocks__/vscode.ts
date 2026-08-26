@@ -22,7 +22,10 @@ export const workspace = {
     onDidDelete: jest.fn(),
     dispose: jest.fn()
   })),
-  openTextDocument: jest.fn()
+  openTextDocument: jest.fn(),
+  workspaceFile: undefined as any,
+  updateWorkspaceFolders: jest.fn(),
+  onDidChangeWorkspaceFolders: jest.fn()
 };
 
 export const window = {

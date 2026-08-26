@@ -30,6 +30,26 @@
         "command": "sabin.refreshTasks",
         "title": "Sabin: Refresh Tasks",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sabin.focusTask",
+        "title": "Sabin: Focus Task",
+        "icon": "$(target)"
+      },
+      {
+        "command": "sabin.openPrompt",
+        "title": "Sabin: Open Prompt for Current Task",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sabin.openWorktree",
+        "title": "Sabin: Open Worktree in New Window",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "sabin.unpinTask",
+        "title": "Sabin: Follow Current Branch",
+        "icon": "$(pinned)"
       }
     ],
     "viewsContainers": {
@@ -44,14 +64,33 @@
     "views": {
       "sabin": [
         {
+          "id": "sabin.workspaceView",
+          "name": "Workspace"
+        },
+        {
           "type": "webview",
           "id": "sabin.tasksView",
-          "name": ""
+          "name": "Board"
         }
       ]
     },
     "menus": {
       "view/title": [
+        {
+          "command": "sabin.focusTask",
+          "when": "view == sabin.workspaceView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sabin.unpinTask",
+          "when": "view == sabin.workspaceView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sabin.refreshTasks",
+          "when": "view == sabin.workspaceView",
+          "group": "navigation@3"
+        },
         {
           "command": "sabin.newTask",
           "when": "view == sabin.tasksView",
@@ -62,8 +101,31 @@
           "when": "view == sabin.tasksView",
           "group": "navigation"
         }
+      ],
+      "view/item/context": [
+        {
+          "command": "sabin.openWorktree",
+          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
+          "group": "inline"
+        }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "sabin.openPrompt",
+        "key": "alt+cmd+p",
+        "mac": "alt+cmd+p",
+        "win": "alt+ctrl+p",
+        "linux": "alt+ctrl+p"
+      },
+      {
+        "command": "sabin.focusTask",
+        "key": "alt+cmd+t",
+        "mac": "alt+cmd+t",
+        "win": "alt+ctrl+t",
+        "linux": "alt+ctrl+t"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
