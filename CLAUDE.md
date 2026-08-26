@@ -175,7 +175,9 @@ Located in `packages/cli/src/`:
   - `--json` - Small flat object; this is the agent's orienting call
   - `-t, --ticket <ticket>` - Override branch inference
 - `sabin where [ticket]` - Print a single path, for shell interpolation
-  - `--notes` (default), `--prompt`, `--worktree`, `--task`, `--sabin`
+  - Ticket paths: `--notes` (default), `--prompt`, `--worktree`, `--task`
+  - Project paths, which need no ticket: `--sabin`, `--code-workspace`
+  - `--code-workspace` regenerates the file if it is missing, since it is fully derived from config
 - `sabin task create` - Create a new task
   - `-t, --title <title>`, `-c, --content <content>`, `-n, --number <number>`, `--slug <slug>`
 - `sabin task list` - List all tasks
