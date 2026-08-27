@@ -32,7 +32,7 @@ export async function readConfig(sabinDir: string): Promise<SabinConfig> {
   try {
     return { ...DEFAULT_CONFIG, ...JSON.parse(content) };
   } catch (error: any) {
-    throw new Error(`Could not parse ${file}: ${error.message}`);
+    throw new Error(`Could not parse ${file}: ${error.message}`, { cause: error });
   }
 }
 

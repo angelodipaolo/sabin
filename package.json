@@ -16,7 +16,13 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "lerna": "^7.0.0",
+    "lerna": "^10.0.1",
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "js-yaml@^4": "^4.3.1",
+    "nx": {
+      "brace-expansion": "^5.0.9"
+    }
   }
 }

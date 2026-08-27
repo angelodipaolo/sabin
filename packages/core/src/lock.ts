@@ -48,7 +48,8 @@ export async function withLock<T>(
       if (Date.now() >= deadline) {
         throw new Error(
           `Timed out waiting for the Sabin lock at ${lockDir}. ` +
-          `If no other sabin command is running, remove that directory.`
+          `If no other sabin command is running, remove that directory.`,
+          { cause: error }
         );
       }
 
