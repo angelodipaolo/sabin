@@ -3,7 +3,7 @@ import * as path from 'path';
 import { SabinWebviewProvider } from './providers/webviewProvider';
 import { SabinFileWatcher } from './watchers/fileWatcher';
 import { WorkspaceService, TaskWorkspace } from './services/workspaceService';
-import { WorkspaceTreeProvider } from './providers/workspaceProvider';
+import { WorkspaceTreeProvider, WorkspaceNode } from './providers/workspaceProvider';
 import { focusFolders } from './services/workspaceFolders';
 import { noteFilename, seedFor } from './services/noteFiles';
 
@@ -41,6 +41,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   registerCommands(context, service, tree, refresh);
+  context.subscriptions.push(registerDeepLink(tree));
+
+  // `sabin open` launches the editor and expects to land here, not wherever
+  // the sidebar was left. Only on a cold start - a deep link handles the case
+  // where the window was already up.
+  if (vscode.workspace.getConfiguration('sabin').get<boolean>('revealOnStartup', true)) {
+    void vscode.commands.executeCommand('sabin.workspaceView.focus');
+  }
+}
+
+/**
+ * vscode://angelodipaolo.sabin-vscode/focus?ticket=SABIN-0016
+ *
+ * How `sabin open` reaches a window that is already running. A URL rather
+ * than a spawned process: the extension stays a reader and writer of Sabin
+ * data, and the OS does the routing.
+ */
+function registerDeepLink(tree: WorkspaceTreeProvider): vscode.Disposable {
+  return vscode.window.registerUriHandler({
+    async handleUri(uri: vscode.Uri) {
+      if (uri.path !== '/focus') return;
+
+      await vscode.commands.executeCommand('sabin.workspaceView.focus');
+
+      const ticket = new URLSearchParams(uri.query).get('ticket');
+      if (ticket) await vscode.commands.executeCommand('sabin.focusTask', ticket);
+    }
+  });
 }
 
 function registerCommands(
@@ -150,6 +178,35 @@ function registerCommands(
       vscode.Uri.file(workspace.worktreeDir),
       { forceNewWindow: true }
     );
+  });
+
+  // Copying is the whole point of these two: the ticket ID is what you paste
+  // after `sabin implement`, and a note's path is what you paste into a shell
+  // or hand to an agent. Retyping either was the reported friction.
+  register('sabin.copyTicket', async (arg?: WorkspaceNode | string) => {
+    const ticket = typeof arg === 'string' ? arg : arg?.workspace?.ticket ?? tree.focused()?.ticket;
+    if (!ticket) {
+      vscode.window.showWarningMessage('No task is focused.');
+      return;
+    }
+    await vscode.env.clipboard.writeText(ticket);
+    vscode.window.setStatusBarMessage(`Copied ${ticket}`, 3000);
+  });
+
+  register('sabin.copyPath', async (arg?: WorkspaceNode | { ticket?: string }) => {
+    const node = arg as WorkspaceNode | undefined;
+    const target =
+      node?.filePath ??
+      (arg && 'ticket' in arg && arg.ticket ? tree.find(arg.ticket)?.taskFile : undefined) ??
+      node?.workspace?.notesDir ??
+      tree.focused()?.notesDir;
+
+    if (!target) {
+      vscode.window.showWarningMessage('Nothing to copy a path for.');
+      return;
+    }
+    await vscode.env.clipboard.writeText(target);
+    vscode.window.setStatusBarMessage(`Copied ${target}`, 3000);
   });
 
   register('sabin.newNote', async () => {

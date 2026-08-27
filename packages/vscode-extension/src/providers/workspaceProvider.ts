@@ -161,6 +161,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
       workspace.promptFile
     );
     prompt.description = 'prompt scratchpad';
+    prompt.contextValue = 'sabinNote';
     prompt.iconPath = new vscode.ThemeIcon('edit');
     prompt.command = openFile(workspace.promptFile);
     nodes.push(prompt);
@@ -173,6 +174,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
       workspace.taskFile
     );
     task.description = 'task';
+    task.contextValue = 'sabinNote';
     task.iconPath = new vscode.ThemeIcon('checklist');
     task.command = openFile(workspace.taskFile);
     nodes.push(task);
@@ -240,6 +242,7 @@ function entryNode(
   );
 
   node.resourceUri = vscode.Uri.file(filePath);
+  node.contextValue = isDirectory ? 'sabinNotesDir' : 'sabinNote';
 
   if (isDirectory) {
     node.iconPath = vscode.ThemeIcon.Folder;

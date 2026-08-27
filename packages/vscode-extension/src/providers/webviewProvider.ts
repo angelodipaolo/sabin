@@ -14,7 +14,8 @@ type BoardMessage =
   | { command: 'openPlan'; ticket: string }
   | { command: 'setStatus'; ticket: string; status: string }
   | { command: 'deleteTask'; ticket: string }
-  | { command: 'copyPath'; ticket: string };
+  | { command: 'copyPath'; ticket: string }
+  | { command: 'copyTicket'; ticket: string };
 
 export class SabinWebviewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'sabin.tasksView';
@@ -81,6 +82,9 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
         return;
       case 'deleteTask':
         await this.deleteTask(message.ticket);
+        return;
+      case 'copyTicket':
+        await vscode.commands.executeCommand('sabin.copyTicket', message.ticket);
         return;
       case 'copyPath': {
         const workspace = await this.service.find(message.ticket);

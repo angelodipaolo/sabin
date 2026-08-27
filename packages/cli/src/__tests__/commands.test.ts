@@ -5,7 +5,7 @@ import { parseTask, findTask } from '@sabin/core';
 import { createTask } from '../commands/create-task';
 import { updateStatus } from '../commands/update-status';
 import { listTasks } from '../commands/list-tasks';
-import { startTask } from '../commands/start';
+import { runStep } from '../commands/agent-step';
 
 jest.mock('chalk', () => {
   const identity = (text: string) => text;
@@ -178,21 +178,56 @@ describe('CLI commands', () => {
     });
   });
 
-  describe('start', () => {
-    it('creates a task from a suffixed ticket and marks it in_progress', async () => {
-      await startTask('SABIN-0007-add-thing', { noWorktree: true });
+  // The three step verbs are one handler, so these run it directly. Worktree
+  // creation needs a git repo, which these do not have; --no-start skips it
+  // and still exercises the prompt, and --print stops before it.
+  describe('the step verbs', () => {
+    it('prompts with the step, the ticket and the task path - nothing else', async () => {
+      await createTask('Update telemetry', { content: 'Swap the exporter.' });
+      log.mockClear();
 
-      const task = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0007.md'));
-      expect(task.status).toBe('in_progress');
-      expect(task.title).toBe('Add thing');
-      expect(task.slug).toBe('add-thing');
-      expect(task.branch).toBe('me/SABIN-0007-add-thing');
-      expect((await fs.stat(path.join(sabinDir, 'notes', 'SABIN-0007-add-thing'))).isDirectory()).toBe(true);
+      await runStep('plan', 'SABIN-0001', { print: true });
+
+      const prompt = logged(log);
+      expect(prompt).toContain('Follow the sabin skill: plan SABIN-0001');
+      expect(prompt).toContain(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
+      // The body stays in the file the agent is being pointed at
+      expect(prompt).not.toContain('Swap the exporter.');
     });
 
-    it('refuses to invent a task from a bare ticket', async () => {
-      await expect(startTask('SABIN-0008', { noWorktree: true })).rejects.toThrow('Process exit 1');
-      expect(logged(error)).toContain('No task found for SABIN-0008');
+    it('refuses a ticket with no task, whichever step is asked for', async () => {
+      for (const step of ['plan', 'implement', 'review'] as const) {
+        error.mockClear();
+        await expect(runStep(step, 'SABIN-0009', { print: true })).rejects.toThrow('Process exit 1');
+        expect(logged(error)).toContain('No task found for SABIN-0009');
+      }
+    });
+
+    it('marks the task in_progress when implementing', async () => {
+      await createTask('Rewrite exporter', {});
+
+      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      const task = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
+      expect(task.status).toBe('in_progress');
+      expect(task.branch).toBe('me/SABIN-0001-rewrite-exporter');
+    });
+
+    it('leaves the status alone when planning or reviewing, but still records the branch', async () => {
+      await createTask('Weigh options', {});
+
+      await runStep('plan', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      const planned = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
+      expect(planned.status).toBe('open');
+      expect(planned.branch).toBe('me/SABIN-0001-weigh-options');
+
+      await updateStatus('SABIN-0001', 'review');
+      await runStep('review', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      // Reviewing must not walk a task backwards into in_progress
+      const reviewed = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
+      expect(reviewed.status).toBe('review');
     });
   });
 });

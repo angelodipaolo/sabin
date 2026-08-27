@@ -28,6 +28,7 @@
 
   const ICON_PLAN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
   const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  const ICON_TICKET = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>';
   const ICON_DELETE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
 
   function renderCard(task) {
@@ -46,6 +47,7 @@
           </div>
           <div class="card-actions">
             <span class="secondary">
+              <button class="icon" data-action="copyTicket" data-ticket="${ticket}" title="Copy ticket ID">${ICON_TICKET}</button>
               <button class="icon" data-action="copyPath" data-ticket="${ticket}" title="Copy task path">${ICON_COPY}</button>
               <button class="icon danger" data-action="deleteTask" data-ticket="${ticket}" title="Delete task">${ICON_DELETE}</button>
             </span>
@@ -111,6 +113,7 @@
       case 'focus': post({ command: 'focus', ticket }); break;
       case 'openTask': post({ command: 'openTask', ticket }); break;
       case 'openPlan': post({ command: 'openPlan', ticket }); break;
+      case 'copyTicket': post({ command: 'copyTicket', ticket }); break;
       case 'copyPath': post({ command: 'copyPath', ticket }); break;
       case 'deleteTask': post({ command: 'deleteTask', ticket }); break;
       case 'setStatus': post({ command: 'setStatus', ticket, status }); closeMenus(); break;
