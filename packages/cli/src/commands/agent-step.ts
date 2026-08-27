@@ -28,6 +28,8 @@ export interface StepOptions {
   here?: boolean;
   yolo?: boolean;
   supervised?: boolean;
+  /** Skip worktree and branch creation. Tests only - no flag sets it. */
+  noWorktree?: boolean;
 }
 
 /**
@@ -84,7 +86,10 @@ export async function runStep(
 
   const started = options.start === false
     ? null
-    : await ensureWorkspace(ticketArg ?? workspace.ticket, { status: STATUS_FOR_STEP[step] });
+    : await ensureWorkspace(ticketArg ?? workspace.ticket, {
+        status: STATUS_FOR_STEP[step],
+        noWorktree: options.noWorktree
+      });
 
   const cwd = started?.worktreeDir ?? (await workingDirectory(workspace.worktreeDir, workspace.mainRoot));
 

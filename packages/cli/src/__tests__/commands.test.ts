@@ -206,7 +206,7 @@ describe('CLI commands', () => {
     it('marks the task in_progress when implementing', async () => {
       await createTask('Rewrite exporter', {});
 
-      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true } as never);
+      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true });
 
       const task = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
       expect(task.status).toBe('in_progress');
@@ -216,14 +216,14 @@ describe('CLI commands', () => {
     it('leaves the status alone when planning or reviewing, but still records the branch', async () => {
       await createTask('Weigh options', {});
 
-      await runStep('plan', 'SABIN-0001', { launch: false, noWorktree: true } as never);
+      await runStep('plan', 'SABIN-0001', { launch: false, noWorktree: true });
 
       const planned = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
       expect(planned.status).toBe('open');
       expect(planned.branch).toBe('me/SABIN-0001-weigh-options');
 
       await updateStatus('SABIN-0001', 'review');
-      await runStep('review', 'SABIN-0001', { launch: false, noWorktree: true } as never);
+      await runStep('review', 'SABIN-0001', { launch: false, noWorktree: true });
 
       // Reviewing must not walk a task backwards into in_progress
       const reviewed = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
