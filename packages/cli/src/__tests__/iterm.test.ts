@@ -29,20 +29,23 @@ describe('iterm', () => {
 
     it('writes nothing when not attached to a terminal', () => {
       const { stream, writes } = fakeStream(false);
-      labelTab('SABIN-0001-x', 'SABIN-0001', stream);
+      labelTab('SABIN-0001-x', stream);
       expect(writes).toEqual([]);
     });
 
-    it('sets the title everywhere and the badge only in iTerm2', () => {
+    it('sets the title and nothing else, iTerm2 included', () => {
       process.env.TERM_PROGRAM = 'Apple_Terminal';
       const plain = fakeStream(true);
-      labelTab('SABIN-0001-x', 'SABIN-0001', plain.stream);
+      labelTab('SABIN-0001-x', plain.stream);
       expect(plain.writes).toEqual(['\x1b]1;SABIN-0001-x\x07']);
 
+      // No badge: it painted the ticket over the output in letters the size
+      // of the window, duplicating a label the tab already carries
       process.env.TERM_PROGRAM = 'iTerm.app';
       const iterm = fakeStream(true);
-      labelTab('SABIN-0001-x', 'SABIN-0001', iterm.stream);
-      expect(iterm.writes[1]).toBe(`\x1b]1337;SetBadgeFormat=${Buffer.from('SABIN-0001').toString('base64')}\x07`);
+      labelTab('SABIN-0001-x', iterm.stream);
+      expect(iterm.writes).toEqual(['\x1b]1;SABIN-0001-x\x07']);
+      expect(iterm.writes.join('')).not.toContain('SetBadgeFormat');
     });
   });
 });

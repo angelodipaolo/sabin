@@ -47,6 +47,12 @@ export interface AgentDefinition {
   command: string;
   /** Argv template. Supports {prompt}, {ticket}, {notesDir}, {worktree}, {taskFile}. */
   args?: string[];
+  /**
+   * Flags that let the agent work without asking permission, prepended when
+   * autonomy is on. Kept apart from `args` so a project can retune one
+   * without restating the other.
+   */
+  autonomousArgs?: string[];
   /** Extra environment for the agent process */
   env?: Record<string, string>;
 }
@@ -54,6 +60,11 @@ export interface AgentDefinition {
 export interface AgentsConfig {
   /** Agent launched when --agent is not given */
   default?: string;
+  /**
+   * Launch agents with permission checks bypassed. Off unless asked for -
+   * `--yolo` turns it on for one run, this makes it the standing default.
+   */
+  autonomous?: boolean;
   /** Named agents, layered over the built-ins */
   definitions?: Record<string, AgentDefinition>;
 }

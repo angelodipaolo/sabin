@@ -67,11 +67,31 @@
         "icon": "$(pinned)"
       },
       {
+        "command": "sabin.copyTicket",
+        "title": "Sabin: Copy Ticket",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "sabin.copyPath",
+        "title": "Sabin: Copy Path",
+        "icon": "$(copy)"
+      },
+      {
         "command": "sabin.openProjectWorkspace",
         "title": "Sabin: Reopen as Sabin Workspace",
         "icon": "$(window)"
       }
     ],
+    "configuration": {
+      "title": "Sabin",
+      "properties": {
+        "sabin.revealOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the Sabin sidebar when a Sabin project opens, so `sabin open` lands on it."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -128,6 +148,21 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "sabin.copyTicket",
+          "when": "view == sabin.workspaceView && viewItem == sabinTask",
+          "group": "inline@0"
+        },
+        {
+          "command": "sabin.copyTicket",
+          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
+          "group": "sabin@0"
+        },
+        {
+          "command": "sabin.copyPath",
+          "when": "view == sabin.workspaceView && viewItem =~ /^sabin(Note|NotesDir|Task|Focused)$/",
+          "group": "sabin@1"
+        },
         {
           "command": "sabin.newNote",
           "when": "view == sabin.workspaceView && viewItem == sabinFocused",

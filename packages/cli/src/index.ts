@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { WorkflowStep } from '@sabin/core';
 import { createTask } from './commands/create-task';
 import { updateStatus } from './commands/update-status';
 import { listTasks } from './commands/list-tasks';
@@ -9,8 +10,7 @@ import { installSkill } from './commands/install-skill';
 import { showContext } from './commands/context';
 import { where } from './commands/where';
 import { showTask } from './commands/show-task';
-import { startTask } from './commands/start';
-import { runAgent } from './commands/run';
+import { runStep, StepOptions } from './commands/agent-step';
 import { notesNew } from './commands/notes';
 import { open } from './commands/open';
 
@@ -37,26 +37,37 @@ program
   .argument('<path>', 'Path to the Sabin directory')
   .action(linkToSharedSabin);
 
-program
-  .command('start')
-  .description('Create the worktree, branch, notes directory and prompt file for a ticket')
-  .argument('<ticket>', 'Ticket, optionally with a description (e.g. JIRA-12345-update-telemetry)')
-  .option('-t, --title <title>', 'Task title, when creating the task')
-  .option('--json', 'Output machine-readable JSON')
-  .option('--no-worktree', 'Skip worktree and branch creation')
-  .action(startTask);
+/**
+ * The three ways an agent gets put on a ticket.
+ *
+ * Registered from one definition so they cannot drift apart - same flags,
+ * same behaviour, only the step differs. Each one creates the worktree if it
+ * is not there and starts the agent inside it; `sabin task create` is the
+ * only thing that does not, because drafting a task is not working on one.
+ */
+const STEPS: Array<{ step: WorkflowStep; summary: string }> = [
+  { step: 'plan', summary: 'Work through a ticket with an agent and write its plan' },
+  { step: 'implement', summary: 'Put an agent on a ticket to do the work' },
+  { step: 'review', summary: "Have an agent review the ticket's changes" }
+];
 
-program
-  .command('run')
-  .description('Launch a coding agent on a ticket, prompted with the task')
-  .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
-  .option('-a, --agent <name>', 'Agent to launch (default: claude)')
-  .option('--claude', 'Shorthand for --agent claude')
-  .option('--codex', 'Shorthand for --agent codex')
-  .option('--tab', 'Launch in a new iTerm2 tab instead of this one')
-  .option('--print', 'Print the composed prompt and exit, without starting anything')
-  .option('--no-start', 'Do not create the worktree or change status first')
-  .action(runAgent);
+for (const { step, summary } of STEPS) {
+  program
+    .command(step)
+    .description(`${summary} (creates the worktree if needed)`)
+    .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
+    .option('-a, --agent <name>', 'Agent to launch (default: claude)')
+    .option('--claude', 'Shorthand for --agent claude')
+    .option('--codex', 'Shorthand for --agent codex')
+    .option('--tab', 'Launch in a new iTerm2 tab (the default under iTerm2)')
+    .option('--here', 'Launch in this tab instead of a new one')
+    .option('--yolo', 'Let the agent work without asking permission')
+    .option('--supervised', 'Make the agent ask, overriding agents.autonomous')
+    .option('--print', 'Print the composed prompt and exit, without starting anything')
+    .option('--no-launch', 'Create the workspace but start no agent')
+    .option('--no-start', 'Do not create the worktree or change status first')
+    .action((ticket: string | undefined, options: StepOptions) => runStep(step, ticket, options));
+}
 
 program
   .command('open')
@@ -69,6 +80,7 @@ program
   .option('--task', 'Open the task file instead')
   .option('--sabin', 'Open the Sabin directory instead')
   .option('-n, --new-window', 'Force a new editor window')
+  .option('--no-reveal', 'Do not focus the Sabin sidebar after opening')
   .option('-e, --editor <command>', 'Editor command (default: code)')
   .action(open);
 

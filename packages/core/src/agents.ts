@@ -10,8 +10,16 @@ import { UnknownAgentError } from './errors';
  * still yours to steer.
  */
 export const BUILT_IN_AGENTS: Record<string, AgentDefinition> = {
-  claude: { command: 'claude', args: ['{prompt}'] },
-  codex: { command: 'codex', args: ['{prompt}'] }
+  claude: {
+    command: 'claude',
+    args: ['{prompt}'],
+    autonomousArgs: ['--dangerously-skip-permissions']
+  },
+  codex: {
+    command: 'codex',
+    args: ['{prompt}'],
+    autonomousArgs: ['--dangerously-bypass-approvals-and-sandbox']
+  }
 };
 
 export const DEFAULT_AGENT = 'claude';
@@ -60,12 +68,21 @@ export interface AgentPlaceholders {
  * A definition that never mentions {prompt} still gets one - the prompt is
  * appended as the final argument - so the minimal `{"command": "aider"}`
  * does the obvious thing rather than silently launching an unprompted agent.
+ *
+ * Autonomy flags go in front: both built-in agents take the prompt as a
+ * positional, so anything appended after it would be read as more prompt.
  */
-export function agentArgv(definition: AgentDefinition, values: AgentPlaceholders): string[] {
+export function agentArgv(
+  definition: AgentDefinition,
+  values: AgentPlaceholders,
+  autonomous = false
+): string[] {
   const template = definition.args ?? ['{prompt}'];
   const args = template.map(arg => substitute(arg, values));
+  const prompted = template.some(arg => arg.includes('{prompt}')) ? args : [...args, values.prompt];
 
-  return template.some(arg => arg.includes('{prompt}')) ? args : [...args, values.prompt];
+  const flags = autonomous ? definition.autonomousArgs ?? [] : [];
+  return [...flags, ...prompted];
 }
 
 function substitute(arg: string, values: AgentPlaceholders): string {
@@ -75,38 +92,39 @@ function substitute(arg: string, values: AgentPlaceholders): string {
   });
 }
 
+/** The three ways an agent is put on a ticket, and the three skill references */
+export const WORKFLOW_STEPS = ['plan', 'implement', 'review'] as const;
+
+export type WorkflowStep = typeof WORKFLOW_STEPS[number];
+
+export function isWorkflowStep(value: string): value is WorkflowStep {
+  return (WORKFLOW_STEPS as readonly string[]).includes(value);
+}
+
 export interface TaskPrompt {
+  step: WorkflowStep;
   ticket: string;
-  title: string;
-  notesDir: string;
-  body: string;
+  taskFile: string;
 }
 
 /**
- * Compose what the agent is prompted with.
+ * Compose what the agent is prompted with: an address, not a procedure.
  *
- * The task body verbatim, under a header naming the ticket and where durable
- * work product belongs. The header is the difference between an agent that
- * orients on its first turn and one that spends a turn guessing.
+ * Which step, which ticket, where the file is - and nothing else. How to do
+ * the step lives in `skills/sabin/references/<step>.md`, which loads on
+ * demand and can be edited without a release; repeating any of it here would
+ * be a second copy free to drift from the first. Everything else the agent
+ * needs comes from one `sabin context --json`, which resolves without
+ * arguments because the agent's cwd is the ticket's worktree.
+ *
+ * The task path rather than the task body: the file is the source of truth,
+ * it can change mid-session, and the agent reads it once either way.
  */
-export function buildTaskPrompt({ ticket, title, notesDir, body }: TaskPrompt): string {
-  const header = [
-    `You are working on ${ticket}: ${title}`,
+export function buildTaskPrompt({ step, ticket, taskFile }: TaskPrompt): string {
+  return [
+    `Follow the sabin skill: ${step} ${ticket}`,
     '',
-    'Follow the sabin skill. Run `sabin context --json` to orient, then read the',
-    `ticket's notes directory before starting - plans, research and any other`,
-    'durable work product belong there:',
-    `  ${notesDir}`,
-    '',
-    'When the work is done and committed, move the task to review with',
-    `\`sabin task update ${ticket} review\` and hand back to the user.`,
-    '',
-    'The task follows.',
-    '',
-    '---',
-    '',
+    `Task: ${taskFile}`,
     ''
   ].join('\n');
-
-  return `${header}${body.trim()}\n`;
 }

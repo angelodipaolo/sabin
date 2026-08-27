@@ -105,23 +105,50 @@ describe('agentArgv', () => {
   });
 });
 
+describe('agentArgv autonomy', () => {
+  const values = { prompt: 'do the thing' };
+
+  it('adds nothing unless autonomy is asked for', () => {
+    expect(agentArgv(BUILT_IN_AGENTS.claude, values)).toEqual(['do the thing']);
+  });
+
+  it('prepends the flags, so the positional prompt stays last', () => {
+    expect(agentArgv(BUILT_IN_AGENTS.claude, values, true))
+      .toEqual(['--dangerously-skip-permissions', 'do the thing']);
+    expect(agentArgv(BUILT_IN_AGENTS.codex, values, true))
+      .toEqual(['--dangerously-bypass-approvals-and-sandbox', 'do the thing']);
+  });
+
+  it('adds nothing for an agent that declares no autonomous flags', () => {
+    expect(agentArgv({ command: 'aider' }, values, true)).toEqual(['do the thing']);
+  });
+});
+
 describe('buildTaskPrompt', () => {
   const prompt = buildTaskPrompt({
+    step: 'plan',
     ticket: 'JIRA-12345',
-    title: 'Update telemetry',
-    notesDir: '/notes/JIRA-12345',
-    body: '\n\nSwap the exporter.\n\n'
+    taskFile: '/tasks/open/JIRA-12345.md'
   });
 
-  it('names the ticket and its title', () => {
-    expect(prompt).toContain('You are working on JIRA-12345: Update telemetry');
+  it('names the step and the ticket, so the skill routes on turn one', () => {
+    expect(prompt.split('\n')[0]).toBe('Follow the sabin skill: plan JIRA-12345');
   });
 
-  it('points at the notes directory so the agent knows where work product goes', () => {
-    expect(prompt).toContain('/notes/JIRA-12345');
+  it('gives the task path, not the task body', () => {
+    expect(prompt).toContain('Task: /tasks/open/JIRA-12345.md');
   });
 
-  it('carries the task body, trimmed of surrounding blank lines', () => {
-    expect(prompt.endsWith('Swap the exporter.\n')).toBe(true);
+  it('carries no procedure - that is the skill\'s job, and only its job', () => {
+    expect(prompt.trim().split('\n').filter(Boolean)).toHaveLength(2);
+    expect(prompt).not.toMatch(/sabin context|notes directory|task update/);
+  });
+
+  it('differs between steps only in the step word', () => {
+    const args = { ticket: 'JIRA-12345', taskFile: '/tasks/open/JIRA-12345.md' } as const;
+    expect(buildTaskPrompt({ ...args, step: 'implement' }))
+      .toBe(prompt.replace('plan JIRA', 'implement JIRA'));
+    expect(buildTaskPrompt({ ...args, step: 'review' }))
+      .toBe(prompt.replace('plan JIRA', 'review JIRA'));
   });
 });

@@ -13,19 +13,19 @@ export function isITerm(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Name the current tab after the ticket and pin it as a badge, so a row of
- * agent tabs reads as SABIN-0011, SABIN-0012... rather than "node".
+ * Name the current tab after the ticket, so a row of agent tabs reads as
+ * SABIN-0011, SABIN-0012... rather than "node".
+ *
+ * The title and nothing else. iTerm2's badge paints the ticket across the
+ * whole window in letters the size of the terminal, over the output you are
+ * trying to read - a label the tab already carries, in the one place it is
+ * in the way.
  */
-export function labelTab(name: string, ticket: string, out: NodeJS.WriteStream = process.stderr): void {
+export function labelTab(name: string, out: NodeJS.WriteStream = process.stderr): void {
   if (!out.isTTY) return;
 
   // OSC 1: tab and window title. Understood by every xterm-alike.
   out.write(`\x1b]1;${name}\x07`);
-
-  // OSC 1337 SetBadgeFormat: iTerm2 only, ignored elsewhere
-  if (isITerm()) {
-    out.write(`\x1b]1337;SetBadgeFormat=${Buffer.from(ticket).toString('base64')}\x07`);
-  }
 }
 
 /**

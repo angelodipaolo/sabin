@@ -12,12 +12,17 @@ ordinary file tools own the rest.
 ## The workflow
 
 ```bash
-sabin task create "Add telemetry to uploads" --open   # task file + notes dir, opens in your editor
-sabin run SABIN-0012                                   # worktree, branch, in_progress, agent launched in it
-sabin run SABIN-0012 --tab                             # ...in a new iTerm2 tab, keeping this shell
+sabin task create "Add telemetry to uploads" --open   # task file + notes dir - no worktree yet
+sabin plan SABIN-0012                                  # an agent works the problem through with you
+sabin implement SABIN-0012                             # an agent does the work
+sabin review SABIN-0012                                # an agent reviews what came back
 sabin task list                                        # what is in flight
 sabin open                                             # board, notes and prompts in one VS Code window
 ```
+
+Drafting a task makes no worktree - it is a file you keep editing until the
+idea is whole. The three step verbs do: each creates the branch and worktree
+if they are not there and starts the agent inside them, in a new iTerm2 tab.
 
 The agent follows the **sabin skill**: it orients with `sabin context --json`,
 reads the ticket's notes, writes plans and research there, and moves the task
@@ -96,9 +101,11 @@ sabin task create "<title>"            [-c body] [-n JIRA-123] [--open] [--json]
 sabin task list                        [-s status] [--all] [--json]
 sabin task show [id]
 sabin task update <id> <status>        prints hooks/<status>.md afterwards
-sabin start <ticket>[-suffix]          worktree + branch + notes, marks in_progress
-sabin run [ticket]                     start, then launch an agent in the worktree
-                                       [--claude|--codex|-a name] [--tab] [--print] [--no-start]
+sabin plan [ticket]                    put an agent on a ticket to plan it, with you
+sabin implement [ticket]               put an agent on a ticket to do the work
+sabin review [ticket]                  put an agent on a ticket to review its changes
+                                       all three: [--claude|--codex|-a name] [--tab|--here]
+                                       [--yolo|--supervised] [--print] [--no-launch]
 sabin open [ticket]                    [--worktree|--notes|--prompt|--plan|--task|--sabin]
 sabin context --json                   the agent's orienting call
 sabin where [ticket]                   [--notes|--prompt|--plan|--worktree|--task|--sabin|--code-workspace]
@@ -107,7 +114,26 @@ sabin skill install                    [--agent claude|codex]
 ```
 
 Tickets are inferred from the current branch when omitted. A branch with no
-ticket is an error, never a guess.
+ticket is an error, never a guess - and so is a bare number: a ticket is named
+in full or not at all.
+
+`plan`, `implement` and `review` are one command with three prompts. Each
+builds the workspace if it is missing and launches the agent in it;
+`--no-launch` stops after the workspace. Only `implement` marks the task
+`in_progress` - planning happens before a task is `ready`, and reviewing
+happens when it is already in `review`.
+
+### Letting agents work unattended
+
+Agents launch supervised: they ask before acting. `--yolo` drops that for one
+run, and
+
+```json
+{ "agents": { "autonomous": true } }
+```
+
+makes it the default, with `--supervised` to override. It is off by default on
+purpose - the worktree isolates your other work, not your machine.
 
 ## VS Code
 
@@ -126,10 +152,10 @@ what you are working on.
 
 ## iTerm2
 
-`sabin run` names the tab after the ticket and sets it as the badge, so a row
-of agent tabs reads as tickets. `sabin run --tab` launches the agent in a new
-tab of the current window instead of taking over your shell. For a plain shell
-in a worktree:
+Under iTerm2 the step verbs open a new tab in the current window, so the shell
+you typed the command in stays yours; `--here` takes it over instead. The tab
+is named after the ticket, so a row of agent tabs reads as tickets. For a plain
+shell in a worktree:
 
 ```bash
 scd() { cd "$(sabin where --worktree "$1")"; }

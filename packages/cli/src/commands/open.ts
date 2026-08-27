@@ -7,8 +7,15 @@ import {
   planPath,
   pathExists
 } from '@sabin/core';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getWorkspace, loadProject, fail } from '../workspace-context';
-import { launchEditor } from '../editor';
+import { launchEditor, resolveEditor } from '../editor';
+
+const execFileAsync = promisify(execFile);
+
+/** Matches the extension's publisher.name, which is what routes the URL */
+const EXTENSION_ID = 'angelodipaolo.sabin-vscode';
 
 interface OpenOptions {
   worktree?: boolean;
@@ -19,6 +26,7 @@ interface OpenOptions {
   sabin?: boolean;
   editor?: string;
   newWindow?: boolean;
+  reveal?: boolean;
 }
 
 const TARGETS = ['worktree', 'notes', 'prompt', 'plan', 'task', 'sabin'] as const;
@@ -49,6 +57,35 @@ export async function open(ticket: string | undefined, options: OpenOptions): Pr
   }
 
   await launchEditor(target, options);
+
+  if (options.reveal !== false && !selected[0]) {
+    await revealSabinView(ticket, options.editor);
+  }
+}
+
+/**
+ * Ask the extension to show the Sabin sidebar, and the ticket if one was
+ * named.
+ *
+ * A URL rather than anything spawned inside VS Code: `open` hands it to
+ * whichever window is already running, and the extension's own reveal-on-
+ * startup covers the cold case. Best effort throughout - failing to focus a
+ * sidebar is not worth failing the command over, and a non-VS Code editor
+ * has no such URL at all.
+ */
+async function revealSabinView(ticket: string | undefined, editorFlag?: string): Promise<void> {
+  if (process.platform !== 'darwin') return;
+
+  const editor = await resolveEditor(editorFlag);
+  if (!editor.includes('code')) return;
+
+  const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
+
+  try {
+    await execFileAsync('open', [`vscode://${EXTENSION_ID}/focus${query}`]);
+  } catch {
+    // The window will still open; only the sidebar focus is lost
+  }
 }
 
 async function projectWorkspace(): Promise<string> {

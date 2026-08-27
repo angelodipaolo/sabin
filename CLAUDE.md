@@ -79,7 +79,7 @@ on the branch is an error, not a fallback - resolving to the wrong ticket's note
 | `tasks.ts` | `listTasks`, `findTask`, `createTask`, `setTaskStatus`, `nextTaskId`, `readHook` - every task write, under `withLock` |
 | `markdown.ts` | `parseTask` / `writeTask` (gray-matter) |
 | `workspace.ts` | `resolveWorkspace`, `workspacePaths`, slugs, `branchNameFor`, `findPlan`, `scaffoldWorkspace` |
-| `agents.ts` | `resolveAgent`, `agentArgv`, `buildTaskPrompt` - pure, so an orchestrator can compose prompts without the CLI |
+| `agents.ts` | `resolveAgent`, `agentArgv`, `buildTaskPrompt`, `WorkflowStep` - pure, so an orchestrator can compose prompts without the CLI |
 | `git.ts` | `currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree` |
 | `sabinResolver.ts` | finds the Sabin directory: link file, walking up, then the main worktree root |
 | `lock.ts` | mkdir lock, scoped to ID allocation and status writes |
@@ -90,8 +90,9 @@ on the branch is an error, not a fallback - resolving to the wrong ticket's note
 
 `index.ts` is the Commander definition; one file per command under `commands/`.
 `workspace-context.ts` (`loadProject`, `getWorkspace`, `fail`) and `workspace-start.ts`
-(`ensureWorkspace`, shared by `start` and `run`) are the only shared pieces. `iterm.ts` labels tabs
-and opens new ones.
+(`ensureWorkspace`, shared by the three step verbs) are the only shared pieces. `iterm.ts` titles
+tabs and opens new ones - the title only; the iTerm2 badge was removed in SABIN-0016 because it
+painted the ticket over the output.
 
 | Command | Does |
 | --- | --- |
@@ -100,15 +101,33 @@ and opens new ones.
 | `task list` | one line per active task; `--all`, `-s`, `--json` |
 | `task update <id> <status>` | the status write; prints the hook |
 | `task show` | print the file |
-| `start <ticket>[-suffix]` | worktree, branch, notes, `in_progress`; creates the task only when given a suffix or `-t` |
-| `run [ticket]` | `start`, then spawn the agent in the worktree; `--tab` for a new iTerm2 tab, `--print` is a pure read |
+| `plan` / `implement` / `review` `[ticket]` | the three step verbs - see below |
 | `open` | the `.code-workspace`, or `--notes/--prompt/--plan/--task/--worktree/--sabin` (notes and prompt are scaffolded on the way) |
 | `context --json` | the agent's orienting call; deliberately omits the prompt file |
 | `where` | one path for shell interpolation |
 | `notes new` | scaffold a note, print the path; the only notes command on purpose |
 | `skill install` | copy `skills/sabin/` to `~/.claude/skills` (or `--agent codex`), removing stale `/sabin-*` commands |
 
-There is deliberately no `finish`, no worktree removal, and no task deletion in the CLI.
+There is deliberately no `finish`, no worktree removal, no task deletion, and no `complete` verb in
+the CLI. Completion needs the user's approval and goes through `task update`.
+
+**The step verbs** (`commands/agent-step.ts`) are one `runStep(step, ticket, options)` registered
+three times from one option set in `index.ts`, so they cannot drift apart. Only the prompt differs.
+They replaced `start` and `run` in SABIN-0016 - those two names were the reported confusion, and
+anything either did is now a verb plus a flag (`--no-launch` is `start`).
+
+Two rules govern worktrees, and they are the whole model:
+
+- `task create` never makes one. A task is a draft you edit until the idea is whole.
+- `plan`, `implement` and `review` always make one, and launch the agent inside it.
+
+There is no `--no-worktree`: it would be a hole in the only rule here worth having, and the thing it
+would be for is what drafting already is. Status is per-step - only `implement` writes
+`in_progress`, since planning precedes `ready` and reviewing follows it (`STATUS_FOR_STEP`).
+
+Under iTerm2 a new tab is the default (`--here` opts out). Autonomy is not: `--yolo` or
+`agents.autonomous` in config.json, with `--supervised` to override. The tab re-invocation has to
+forward the step, the agent and the autonomy choice, or the child opens a tab of its own.
 
 ## VS Code extension (`packages/vscode-extension/src`)
 
@@ -133,9 +152,16 @@ goes in `notesDir`; status only via `sabin task update`; `review` is the agent's
 `completed` needs explicit approval; never read the prompts directory (also enforced by a
 `permissions.deny` rule `init` writes to `.claude/settings.local.json`).
 
-`buildTaskPrompt()` tells a launched agent to follow the skill and end in `review`. Orchestration
-(SABIN-0014) is intentionally not built; the seams for it are `references/`, `buildTaskPrompt`, and
-`run --print`.
+`buildTaskPrompt()` is an address, not a procedure - three lines naming the step, the ticket and the
+task file, and nothing else. How to do a step lives in `references/<step>.md`, which loads on demand
+and can be edited without a release; anything restated in the prompt would be a second copy free to
+drift. It passes the task **path**, not the task body: the file is the source of truth and can change
+mid-session. The agent's cwd is the ticket's worktree, so its `sabin context --json` needs no
+arguments.
+
+The skill stops rather than coping when a step is asked for outside the ticket's worktree - it never
+`cd`s and never creates one. Orchestration (SABIN-0014) is intentionally not built; the seams for it
+are `references/`, `buildTaskPrompt`, and `<step> --print`.
 
 ## This repository's own Sabin
 

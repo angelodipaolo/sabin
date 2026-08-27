@@ -5,20 +5,18 @@ import { promisify } from 'util';
 import chalk from 'chalk';
 import {
   findTask,
-  createTask,
   setTaskStatus,
   resolveWorkspace,
   workspacePaths,
   scaffoldWorkspace,
-  titleFromSlug,
   branchNameFor,
   parseTicketArg,
-  slugify,
   addWorktree,
   listWorktrees,
   writeSabinLink,
   pathExists,
   SabinConfig,
+  TaskStatus,
   Workspace
 } from '@sabin/core';
 import { fail, loadProject } from './workspace-context';
@@ -26,15 +24,16 @@ import { fail, loadProject } from './workspace-context';
 const execFileAsync = promisify(execFile);
 
 export interface EnsureWorkspaceOptions {
-  /** Task title, used when the task has to be created */
-  title?: string;
-  /** Skip worktree and branch creation */
+  /** Skip worktree and branch creation. Tests only - no command sets it. */
   noWorktree?: boolean;
   /**
-   * Create the task when no file exists for the ticket. `start` does;
-   * `run` does not, because an invented task is nothing to prompt with.
+   * Status to write, or null to leave the task where it is.
+   *
+   * Only implementing means "work underway". Planning happens before a task
+   * is `ready` and reviewing happens when it is already in `review`, so both
+   * pass null - the branch, slug and worktree are still recorded either way.
    */
-  createTask?: boolean;
+  status?: TaskStatus | null;
 }
 
 export interface StartedWorkspace {
@@ -50,10 +49,12 @@ export interface StartedWorkspace {
 
 /**
  * Bring a ticket's workspace into existence: worktree, branch, notes
- * directory, prompt scratchpad, and the task marked in_progress.
+ * directory and prompt scratchpad.
  *
  * Idempotent - everything that already exists is left alone - which is what
- * lets both `sabin start` and `sabin run` call it without coordinating.
+ * lets `plan`, `implement` and `review` all call it without coordinating.
+ * The task itself is never created here: `sabin task create` is the one way
+ * a task comes into being, and a ticket with no task file is an error.
  */
 export async function ensureWorkspace(
   ticketArg: string,
@@ -69,37 +70,16 @@ export async function ensureWorkspace(
     );
   }
 
-  const workspace = await resolveWorkspace({
-    sabinDir,
-    config,
-    ticket: ticketArg,
-    slug: options.title ? slugify(options.title) : undefined
-  });
+  const workspace = await resolveWorkspace({ sabinDir, config, ticket: ticketArg });
 
   const created: string[] = [];
-  let task = await findTask(sabinDir, parsed.ticket);
+  const task = await findTask(sabinDir, parsed.ticket);
 
-  // A descriptive suffix or an explicit title is enough to create the task
   if (!task) {
-    if (!options.createTask) {
-      fail(
-        `No task found for ${parsed.ticket}.\n` +
-        `Create it first:  sabin task create "<title>" -n ${parsed.ticket}`
-      );
-    }
-    if (!parsed.slug && !options.title) {
-      fail(
-        `No task found for ${parsed.ticket}.\n` +
-        `Add a description to create it:  sabin start ${parsed.ticket}-<description>\n` +
-        `Or create it first:              sabin task create "<title>" -n ${parsed.ticket}`
-      );
-    }
-    task = await createTask(sabinDir, config, {
-      id: parsed.ticket,
-      title: options.title ?? (workspace.slug ? titleFromSlug(workspace.slug) : parsed.ticket),
-      slug: workspace.slug ?? undefined
-    });
-    created.push(task.path);
+    fail(
+      `No task found for ${parsed.ticket}.\n` +
+      `Create it first:  sabin task create "<title>" -n ${parsed.ticket}`
+    );
   }
 
   // The recorded suffix wins, so a workspace keeps its paths for life
@@ -127,7 +107,10 @@ export async function ensureWorkspace(
 
   await scaffoldWorkspace(paths, task.title, created);
 
-  const updated = await setTaskStatus(sabinDir, task.id, 'in_progress', {
+  // A null status still writes the patch - setTaskStatus with the status the
+  // task already has records the branch and worktree and moves nothing
+  const status = options.status === undefined ? 'in_progress' : options.status;
+  const updated = await setTaskStatus(sabinDir, task.id, status ?? task.status, {
     branch,
     slug: slug ?? undefined,
     worktree: worktreeDir ?? undefined
