@@ -4,6 +4,7 @@ import {
   resolveSabinDir,
   resolveWorkspace,
   NoTicketError,
+  UnknownTicketError,
   SabinConfig,
   Workspace
 } from '@sabin/core';
@@ -32,8 +33,8 @@ export async function loadProject(): Promise<Project> {
  * Resolve the project and the current ticket's workspace in one step.
  *
  * Exits with a clear message rather than guessing when no ticket can be
- * determined - silently resolving to the wrong ticket's notes would be worse
- * than failing.
+ * determined, or when a named one has no task - silently resolving to the
+ * wrong ticket's notes would be worse than failing.
  */
 export async function getWorkspace(ticket?: string): Promise<CliWorkspace> {
   const project = await loadProject();
@@ -42,7 +43,7 @@ export async function getWorkspace(ticket?: string): Promise<CliWorkspace> {
     const workspace = await resolveWorkspace({ sabinDir: project.sabinDir, config: project.config, ticket });
     return { ...project, workspace };
   } catch (error) {
-    if (error instanceof NoTicketError) fail(error.message);
+    if (error instanceof NoTicketError || error instanceof UnknownTicketError) fail(error.message);
     throw error;
   }
 }

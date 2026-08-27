@@ -70,7 +70,9 @@ export async function ensureWorkspace(
     );
   }
 
-  const workspace = await resolveWorkspace({ sabinDir, config, ticket: ticketArg });
+  // This is the one caller that resolves before checking for the task, so it
+  // can refuse with the ticket's own name and the command that fixes it
+  const workspace = await resolveWorkspace({ sabinDir, config, ticket: ticketArg, allowMissingTask: true });
 
   const created: string[] = [];
   const task = await findTask(sabinDir, parsed.ticket);

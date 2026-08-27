@@ -70,6 +70,11 @@ run anyway. No new command, nothing for the skill to remember.
 
 **Ticket inference**: from the branch (the project prefix first, then any `UPPER-123` key). No ticket
 on the branch is an error, not a fallback - resolving to the wrong ticket's notes is the worst failure.
+A ticket named explicitly (argument or `SABIN_TICKET`) must have a task file or `resolveWorkspace()`
+throws `UnknownTicketError`; every path is derived from the ID, so a typo would otherwise resolve
+cleanly into a directory nothing else looks in. Branch-derived tickets are exempt - `task create`
+records the branch before the task lands - and `allowMissingTask` lets `ensureWorkspace` refuse with
+its own message.
 
 ## Core (`packages/core/src`)
 

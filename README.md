@@ -107,15 +107,17 @@ sabin review [ticket]                  put an agent on a ticket to review its ch
                                        all three: [--claude|--codex|-a name] [--tab|--here]
                                        [--yolo|--supervised] [--print] [--no-launch]
 sabin open [ticket]                    [--worktree|--notes|--prompt|--plan|--task|--sabin]
-sabin context --json                   the agent's orienting call
+sabin context --json                   [-t ticket] the agent's orienting call
 sabin where [ticket]                   [--notes|--prompt|--plan|--worktree|--task|--sabin|--code-workspace]
-sabin notes new <name>                 [--template plan]
+sabin notes new <name>                 [-t ticket] [--template plan]
 sabin skill install                    [--agent claude|codex]
 ```
 
 Tickets are inferred from the current branch when omitted. A branch with no
 ticket is an error, never a guess - and so is a bare number: a ticket is named
-in full or not at all.
+in full or not at all. A ticket you *name* has to have a task: resolving one
+that does not exist would hand back a plausible path to a directory nothing
+else will ever look in.
 
 `plan`, `implement` and `review` are one command with three prompts. Each
 builds the workspace if it is missing and launches the agent in it;

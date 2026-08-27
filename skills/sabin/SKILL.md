@@ -41,6 +41,10 @@ sabin context --json -t <TICKET>
 The ticket is inferred from the branch. **If the command errors, stop and ask**
 which ticket - writing into the wrong ticket's notes is worse than not writing.
 
+Every path command takes a ticket the same way, so another ticket's workspace is
+one call away - `sabin where --notes JIRA-123`, `sabin notes new -t JIRA-123
+research`. A ticket with no task is an error, not a new directory.
+
 ## What you are being asked to do
 
 Route on the request, then read the matching reference and follow it:
@@ -70,9 +74,10 @@ explicit forms above count as approval to close a task; anything ambiguous
 
 **Notes.** `notesDir` is where every durable work product goes: plans,
 research, findings, saved output, any format. Read it before starting work;
-earlier notes carry decisions you would otherwise re-litigate. Write with
-ordinary file tools. `sabin notes new <name>` scaffolds a file and prints its
-path.
+earlier notes carry decisions you would otherwise re-litigate. Reading, editing
+and searching them is your own file tools' job - there is no command for it.
+`sabin notes new [-t <TICKET>] <name>` scaffolds a file and prints its path,
+creating the notes directory; `where --notes` only reports it.
 
 **One plan per ticket**, at `plan.md` in `notesDir`. Stages are phases inside
 that file, never a second file. Re-planning edits it in place.
@@ -126,13 +131,14 @@ the idea is still forming.
 
 | Command | Use |
 | --- | --- |
-| `sabin context --json` | Orient: ticket, status, branch, worktree, notes, plan |
+| `sabin context [-t <ticket>] --json` | Orient: ticket, status, branch, worktree, notes, plan |
 | `sabin plan <TICKET>` | Put an agent on a ticket to plan it, in its worktree |
 | `sabin implement <TICKET>` | Put an agent on a ticket to do the work |
 | `sabin review <TICKET>` | Put an agent on a ticket to review its changes |
-| `sabin where --notes` / `--plan` | One path, for shell interpolation |
+| `sabin where --notes` / `--plan` `[<ticket>]` | One path, for shell interpolation |
 | `sabin task show [id]` | Read a task without knowing its directory |
 | `sabin task update <id> <status>` | Change status; prints the project hook |
 | `sabin task create "<title>" [-c <body>] [-n <id>]` | Create a task with its notes directory |
 | `sabin task list [-s <status>] [--json]` | What else is in flight |
-| `sabin notes new <name> [--template plan]` | Scaffold a note and print its path |
+| `sabin notes new [-t <ticket>] <name> [--template plan]` | Scaffold a note and print its path |
+| your own file tools | Read, edit and search notes - there is no command for it |

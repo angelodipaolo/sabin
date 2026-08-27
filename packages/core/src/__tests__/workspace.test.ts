@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import {
   ticketFromBranch,
   slugify,
@@ -11,7 +13,10 @@ import {
   workspaceName,
   slugFromBranch,
   findWorkspaceDir,
-  slugFromTitle
+  slugFromTitle,
+  resolveWorkspace,
+  UnknownTicketError,
+  NoTicketError
 } from '../workspace';
 import { findTaskFile } from '../tasks';
 import { SabinConfig } from '../types';
@@ -312,5 +317,82 @@ describe('findWorkspaceDir', () => {
 
   it('returns null for a missing root', async () => {
     expect(await findWorkspaceDir(path.join(testDir, 'nope'), 'SABIN-0004')).toBeNull();
+  });
+});
+
+describe('resolveWorkspace', () => {
+  let root: string;
+  let sabinDir: string;
+
+  async function writeTask(id: string, title: string): Promise<void> {
+    const dir = path.join(sabinDir, 'tasks', 'open');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, `${id}.md`), `---\nstatus: open\ntitle: ${title}\n---\n`);
+  }
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'sabin-resolve-'));
+    sabinDir = path.join(root, '.sabin');
+    await fs.mkdir(sabinDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+    delete process.env.SABIN_TICKET;
+  });
+
+  it('resolves a named ticket that has a task', async () => {
+    await writeTask('SABIN-0001', 'Update telemetry');
+
+    const workspace = await resolveWorkspace({ sabinDir, config, cwd: root, ticket: 'SABIN-0001' });
+
+    expect(workspace.ticket).toBe('SABIN-0001');
+    expect(workspace.notesDir).toBe(path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry'));
+  });
+
+  // A typo would otherwise resolve cleanly and send notes somewhere nothing
+  // else will ever look
+  it('refuses a named ticket with no task', async () => {
+    await expect(
+      resolveWorkspace({ sabinDir, config, cwd: root, ticket: 'NOPE-1' })
+    ).rejects.toThrow(UnknownTicketError);
+
+    await expect(
+      resolveWorkspace({ sabinDir, config, cwd: root, ticket: 'NOPE-1' })
+    ).rejects.toThrow('sabin task create "<title>" -n NOPE-1');
+  });
+
+  it('refuses a ticket named through SABIN_TICKET with no task', async () => {
+    process.env.SABIN_TICKET = 'NOPE-1';
+
+    await expect(
+      resolveWorkspace({ sabinDir, config, cwd: root })
+    ).rejects.toThrow(UnknownTicketError);
+  });
+
+  it('resolves a missing task for the callers that are about to create one', async () => {
+    const workspace = await resolveWorkspace({
+      sabinDir, config, cwd: root, ticket: 'SABIN-0002', allowMissingTask: true
+    });
+
+    expect(workspace.ticket).toBe('SABIN-0002');
+    expect(workspace.taskFile).toBeNull();
+  });
+
+  // `sabin task create` records the branch before the task file lands, so a
+  // ticket read off the branch must keep resolving without one
+  it('allows a branch-inferred ticket with no task', async () => {
+    const repo = path.join(root, 'repo');
+    await fs.mkdir(repo, { recursive: true });
+    await promisify(execFile)('git', ['init', '-q', '-b', 'me/SABIN-0003-weigh-options'], { cwd: repo });
+
+    const workspace = await resolveWorkspace({ sabinDir, config, cwd: repo });
+
+    expect(workspace.ticket).toBe('SABIN-0003');
+    expect(workspace.taskFile).toBeNull();
+  });
+
+  it('still needs a ticket from somewhere', async () => {
+    await expect(resolveWorkspace({ sabinDir, config, cwd: root })).rejects.toThrow(NoTicketError);
   });
 });

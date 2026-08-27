@@ -6,6 +6,9 @@ import { createTask } from '../commands/create-task';
 import { updateStatus } from '../commands/update-status';
 import { listTasks } from '../commands/list-tasks';
 import { runStep } from '../commands/agent-step';
+import { where } from '../commands/where';
+import { showContext } from '../commands/context';
+import { notesNew } from '../commands/notes';
 
 jest.mock('chalk', () => {
   const identity = (text: string) => text;
@@ -175,6 +178,34 @@ describe('CLI commands', () => {
 
     it('rejects an invalid status filter', async () => {
       await expect(listTasks({ status: 'nope' })).rejects.toThrow('Process exit 1');
+    });
+  });
+
+  // Naming a ticket is the documented way to reach another ticket's notes, so
+  // a typo has to fail rather than resolve to a directory nothing looks in
+  describe('naming a ticket that does not exist', () => {
+    it('refuses to print a path for it', async () => {
+      await expect(where('NOPE-1', { notes: true })).rejects.toThrow('Process exit 1');
+      expect(logged(error)).toContain('No task found for NOPE-1');
+      expect(logged(log)).toBe('');
+    });
+
+    it('refuses to orient against it', async () => {
+      await expect(showContext({ ticket: 'NOPE-1', json: true })).rejects.toThrow('Process exit 1');
+      expect(logged(error)).toContain('No task found for NOPE-1');
+    });
+
+    it('refuses to scaffold a note in it', async () => {
+      await expect(notesNew('research', { ticket: 'NOPE-1' })).rejects.toThrow('Process exit 1');
+      await expect(fs.access(path.join(sabinDir, 'notes', 'NOPE-1'))).rejects.toThrow();
+    });
+
+    it('still resolves a ticket that does exist', async () => {
+      await createTask('Update telemetry', {});
+      log.mockClear();
+
+      await where('SABIN-0001', { notes: true });
+      expect(logged(log)).toBe(path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry'));
     });
   });
 

@@ -314,12 +314,26 @@ export interface ResolveWorkspaceOptions {
   ticket?: string;
   /** Explicit suffix, overriding whatever the task file records */
   slug?: string | null;
+  /**
+   * Resolve a named ticket that has no task file yet.
+   *
+   * Only for the callers that are about to create one. Everything else wants
+   * the error - see `resolveWorkspace`.
+   */
+  allowMissingTask?: boolean;
 }
 
 /**
  * Resolve the workspace for the current checkout.
  *
  * Ticket resolution order: explicit argument, SABIN_TICKET, then the branch.
+ *
+ * A ticket that was *named* - by argument or by SABIN_TICKET - must have a
+ * task file, or this throws. Every path here is derived from the ticket, so a
+ * typo would otherwise resolve cleanly and send notes to a directory nothing
+ * else will ever look in. A ticket read off the branch is held to no such
+ * rule: `sabin task create` records the branch before the task exists, and
+ * the step verbs report their own message.
  */
 export async function resolveWorkspace(options: ResolveWorkspaceOptions): Promise<Workspace> {
   const cwd = options.cwd ?? process.cwd();
@@ -340,6 +354,10 @@ export async function resolveWorkspace(options: ResolveWorkspaceOptions): Promis
   }
 
   const taskFile = await findTaskFile(sabinDir, parsed.ticket);
+  if (!taskFile && explicit && !options.allowMissingTask) {
+    throw new UnknownTicketError(parsed.ticket);
+  }
+
   const slug = await resolveSlug(parsed, taskFile, sabinDir, config, options.slug);
 
   const paths = workspacePaths({ ticket: parsed.ticket, slug }, sabinDir, mainRoot, config);
@@ -394,6 +412,22 @@ export class NoTicketError extends Error {
         : 'Not on a branch (detached HEAD). Pass a ticket explicitly or set SABIN_TICKET.'
     );
     this.name = 'NoTicketError';
+  }
+}
+
+/**
+ * A ticket was named, and no task by that name exists.
+ *
+ * Worded like the step verbs' own refusal, so the fix reads the same wherever
+ * it surfaces.
+ */
+export class UnknownTicketError extends Error {
+  constructor(public ticket: string) {
+    super(
+      `No task found for ${ticket}.\n` +
+      `Create it first:  sabin task create "<title>" -n ${ticket}`
+    );
+    this.name = 'UnknownTicketError';
   }
 }
 
