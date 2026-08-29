@@ -8,8 +8,10 @@ no plan.
 1. **Orient.** `sabin context --json`. If it errors, ask which ticket.
 2. **Read the task:** `sabin task show`.
 3. **Read the notes.** Everything in `notesDir`, plan first if there is one.
-4. If the status is not already `in_progress`:
-   `sabin task update <TICKET> in_progress`
+4. If the status is behind `in_progress` (`open` or `ready`):
+   `sabin task update <TICKET> in_progress`. Never write it over `review` -
+   addressing feedback is implementation work that happens *in* `review`, and
+   walking the task back would claim nobody had reviewed it.
 
 ## With a plan
 
@@ -52,10 +54,14 @@ scaffolds a file and prints its path.
 ## Finishing
 
 1. Run the full verification once more.
-2. **Commit**, with the ticket ID in the message. Leave the worktree in place.
+2. **Do not commit.** The worktree is left dirty on purpose, so the reviewer
+   reads the actual working state rather than a diff of something already
+   sealed. `/sabin complete` makes the one commit, at the end.
 3. `sabin task update <TICKET> review` - and follow anything it prints.
-4. Tell the user it is waiting on them:
+4. Tell the user, naming the next step and the fact that nothing is committed:
 
-   > SABIN-0002 is in review. Say `/sabin complete` once you have verified it.
+   > SABIN-0002 is in review - nothing is committed yet. Run
+   > `sabin review SABIN-0002` for a fresh read, then `/sabin complete` once
+   > you are happy.
 
 You do not move a task to `completed`. That is the user's call.

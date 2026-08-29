@@ -44,7 +44,7 @@ cd packages/vscode-extension && npx @vscode/vsce package && code --install-exten
   config.json
   tasks/open/        status open, ready, in_progress, review
   tasks/completed/   status completed
-  notes/<TICKET>-<slug>/          agent-readable; plan.md lives here
+  notes/<TICKET>-<slug>/          agent-readable; plan.md and feedback.md live here
   prompts/<TICKET>-<slug>.md      human scratchpad; agent denied
   hooks/<status>.md               printed by `task update` after that transition
   research/
@@ -64,6 +64,13 @@ scratchpad. Once recorded in the task file it is fixed. Resolution order: explic
 **Plan**: exactly one per ticket, at `notesDir/plan.md`. Derived, never recorded. `findPlan()` is the
 only answer to "does this ticket have a plan".
 
+**Feedback**: exactly one per ticket, at `notesDir/feedback.md`, beside the plan. Derived, never
+recorded. `findFeedback()` is the only answer to "is there feedback". Every review pass appends a
+`## Round <n> — <source> · <date>` section of `- [ ]` findings; the implementer ticks them and adds
+`*Addressed:*`. Append-only - nothing is deleted, rewritten or un-ticked, so a second model's pass
+sits below the first's and GitHub PR comments pulled down with `gh` are just another round. The
+format lives in `skills/sabin/references/feedback.md` and nowhere else.
+
 **Hooks**: `hooks/<status>.md` is prose for the agent. `sabin task update X completed` prints
 `hooks/completed.md` after the move, so "push and open a PR" arrives from the command the agent had to
 run anyway. No new command, nothing for the skill to remember.
@@ -78,7 +85,7 @@ on the branch is an error, not a fallback - resolving to the wrong ticket's note
 | `types.ts` | `Task`, `TaskStatus`, `TASK_STATUSES`, `SabinConfig` |
 | `tasks.ts` | `listTasks`, `findTask`, `createTask`, `setTaskStatus`, `nextTaskId`, `readHook` - every task write, under `withLock` |
 | `markdown.ts` | `parseTask` / `writeTask` (gray-matter) |
-| `workspace.ts` | `resolveWorkspace`, `workspacePaths`, slugs, `branchNameFor`, `findPlan`, `scaffoldWorkspace` |
+| `workspace.ts` | `resolveWorkspace`, `workspacePaths`, slugs, `branchNameFor`, `findPlan`, `findFeedback`, `scaffoldWorkspace` |
 | `agents.ts` | `resolveAgent`, `agentArgv`, `buildTaskPrompt`, `WorkflowStep` - pure, so an orchestrator can compose prompts without the CLI |
 | `git.ts` | `currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree` |
 | `sabinResolver.ts` | finds the Sabin directory: link file, walking up, then the main worktree root |
@@ -102,10 +109,10 @@ painted the ticket over the output.
 | `task update <id> <status>` | the status write; prints the hook |
 | `task show` | print the file |
 | `plan` / `implement` / `review` `[ticket]` | the three step verbs - see below |
-| `open` | the `.code-workspace`, or `--notes/--prompt/--plan/--task/--worktree/--sabin` (notes and prompt are scaffolded on the way) |
+| `open` | the `.code-workspace`, or `--notes/--prompt/--plan/--feedback/--task/--worktree/--sabin` (notes and prompt are scaffolded on the way) |
 | `context --json` | the agent's orienting call; deliberately omits the prompt file |
-| `where` | one path for shell interpolation |
-| `notes new` | scaffold a note, print the path; the only notes command on purpose |
+| `where` | one path for shell interpolation; `--plan` and `--feedback` among them |
+| `notes new` | scaffold a note, print the path; `--template plan\|feedback`; the only notes command on purpose |
 | `skill install` | copy `skills/sabin/` to `~/.claude/skills` (or `--agent codex`), removing stale `/sabin-*` commands |
 
 There is deliberately no `finish`, no worktree removal, no task deletion, and no `complete` verb in
@@ -146,11 +153,26 @@ Commands: `focusTask` (⌥⌘T), `openPrompt` (⌥⌘P), `openPlan` (⌥⌘L), `
 ## Agent integration
 
 `skills/sabin/SKILL.md` is lean and routes; the long-form workflow is in `skills/sabin/references/`
-(`task-create`, `plan`, `implement`, `review`, `complete`) and loads only when that step is requested.
-Rules the skill enforces: orient with `sabin context --json` and stop if it errors; everything durable
-goes in `notesDir`; status only via `sabin task update`; `review` is the agent's ceiling and
-`completed` needs explicit approval; never read the prompts directory (also enforced by a
-`permissions.deny` rule `init` writes to `.claude/settings.local.json`).
+(`task-create`, `plan`, `implement`, `review`, `address-feedback`, `complete`, plus `feedback` for the
+file format) and loads only when that step is requested. Rules the skill enforces: orient with
+`sabin context --json` and stop if it errors; everything durable goes in `notesDir`; status only via
+`sabin task update`; `review` is the agent's ceiling and `completed` needs explicit approval; never
+read the prompts directory (also enforced by a `permissions.deny` rule `init` writes to
+`.claude/settings.local.json`).
+
+**Feedback (SABIN-0020).** One `feedback.md` per ticket, beside `plan.md`, derived by `findFeedback()`
+and surfaced the same ways `plan` is (`context --json`, `where --feedback`, `open --feedback`,
+`notes new --template feedback`). Review passes append rounds to it and never edit an earlier one; the
+implementer ticks `- [x]` and adds either `*Addressed:*` (what was done) or `*Declined:*` (the
+user's call not to do it) - an item stays open only while it is genuinely undecided, since
+`complete` reads an open box as work nobody did. The format lives only in `references/feedback.md` -
+the template in `notes.ts` is a title and a pointer, so there is no second copy to drift. Nothing is
+committed until `/sabin complete`: `implement` and `address feedback` deliberately leave the worktree
+dirty so a reviewer reads the working state, and `complete` blocks on any open `- [ ]`. The one
+exception is a ticket whose PR is already open - past completion the branch is public, so rounds
+pulled from that PR commit and push normally. No step verb moves a task backwards either
+(`stepStatus` in `workspace-start.ts`), so `implement` on a ticket in `review` leaves it there. What happens
+after completion is the hook's to say (`hooks/completed.md`), never the skill's.
 
 `buildTaskPrompt()` is an address, not a procedure - three lines naming the step, the ticket and the
 task file, and nothing else. How to do a step lives in `references/<step>.md`, which loads on demand

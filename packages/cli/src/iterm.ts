@@ -30,8 +30,8 @@ export function labelTab(name: string, out: NodeJS.WriteStream = process.stderr)
 
 /**
  * Open a new iTerm2 tab in the front window, cd'd into `cwd` and running
- * `command`. Lets `sabin run --tab` kick an agent off while the shell you
- * typed it in stays free.
+ * `command`. Lets `sabin implement` kick an agent off in its own tab while
+ * the shell you typed it in stays free.
  */
 export async function openTab(cwd: string, command: string): Promise<void> {
   const script = [

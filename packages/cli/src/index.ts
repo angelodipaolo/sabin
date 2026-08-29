@@ -77,6 +77,7 @@ program
   .option('--notes', "Open the ticket's notes directory instead")
   .option('--prompt', "Open the ticket's prompt scratchpad instead")
   .option('--plan', "Open the ticket's plan instead")
+  .option('--feedback', "Open the ticket's review feedback instead")
   .option('--task', 'Open the task file instead')
   .option('--sabin', 'Open the Sabin directory instead')
   .option('-n, --new-window', 'Force a new editor window')
@@ -98,6 +99,7 @@ program
   .option('--notes', 'Path to the ticket notes directory (default)')
   .option('--prompt', 'Path to the ticket prompt scratchpad')
   .option('--plan', 'Path to the ticket plan')
+  .option('--feedback', 'Path to the ticket feedback file')
   .option('--worktree', 'Path to the ticket worktree')
   .option('--task', 'Path to the task file')
   .option('--sabin', 'Path to the resolved Sabin directory')
@@ -149,7 +151,7 @@ notes
   .command('new')
   .description('Scaffold a note in the ticket notes directory and print its path')
   .argument('<name>', 'Note filename, e.g. research, schema.json, data.csv (defaults to .md)')
-  .option('--template <template>', 'Seed from a template (plan)')
+  .option('--template <template>', 'Seed from a template (plan, feedback)')
   .option('-t, --ticket <ticket>', 'Override branch inference')
   .action(notesNew);
 

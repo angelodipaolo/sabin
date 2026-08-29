@@ -11,7 +11,9 @@ import {
   workspaceName,
   slugFromBranch,
   findWorkspaceDir,
-  slugFromTitle
+  slugFromTitle,
+  findFeedback,
+  feedbackPath
 } from '../workspace';
 import { findTaskFile } from '../tasks';
 import { SabinConfig } from '../types';
@@ -312,5 +314,27 @@ describe('findWorkspaceDir', () => {
 
   it('returns null for a missing root', async () => {
     expect(await findWorkspaceDir(path.join(testDir, 'nope'), 'SABIN-0004')).toBeNull();
+  });
+});
+
+describe('findFeedback', () => {
+  let notesDir: string;
+
+  beforeEach(async () => {
+    notesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sabin-feedback-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(notesDir, { recursive: true, force: true });
+  });
+
+  it('returns the path once the file exists', async () => {
+    await fs.writeFile(feedbackPath(notesDir), '# Feedback: SABIN-0020\n');
+
+    expect(await findFeedback(notesDir)).toBe(path.join(notesDir, 'feedback.md'));
+  });
+
+  it('returns null before anything has been reviewed', async () => {
+    expect(await findFeedback(notesDir)).toBeNull();
   });
 });

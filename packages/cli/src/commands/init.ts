@@ -165,7 +165,7 @@ async function report(
 
   console.log(chalk.gray('\nCreate a task, then hand it to an agent:'));
   console.log(chalk.gray(`  sabin task create "My first change" --open`));
-  console.log(chalk.gray(`  sabin run ${config.projectPrefix}-0001`));
+  console.log(chalk.gray(`  sabin plan ${config.projectPrefix}-0001`));
   console.log(chalk.gray('\nOpen the board, notes and prompts in VS Code:'));
   console.log(chalk.gray('  sabin open\n'));
 }

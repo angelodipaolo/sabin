@@ -1,6 +1,6 @@
 ---
 name: sabin
-description: Use when working in a repository managed by Sabin - any repo containing a .sabin directory or .sabin link file. Resolves where the current ticket's notes live so you can read context and save plans, research, and docs without being told paths. Triggers on "Follow the sabin skill: plan/implement/review <TICKET>" (how `sabin plan`, `sabin implement` and `sabin review` open a session), on "our notes", "save this to notes", "read the plan", "the ticket", and on any task, plan, or status change in a Sabin project.
+description: Use when working in a repository managed by Sabin - any repo containing a .sabin directory or .sabin link file. Resolves where the current ticket's notes live so you can read context and save plans, research, and docs without being told paths. Triggers on "Follow the sabin skill: plan/implement/review <TICKET>" (how `sabin plan`, `sabin implement` and `sabin review` open a session), on "our notes", "save this to notes", "read the plan", "the ticket", "address the feedback", "pull the PR comments", and on any task, plan, feedback, or status change in a Sabin project.
 ---
 
 # Sabin
@@ -34,6 +34,7 @@ sabin context --json -t <TICKET>
   "notesDir": "/Users/angelo/notes/myproject/.sabin/notes/JIRA-12345-update-telemetry",
   "taskFile": "/Users/angelo/notes/myproject/.sabin/tasks/open/JIRA-12345.md",
   "plan": "/Users/angelo/notes/myproject/.sabin/notes/JIRA-12345-update-telemetry/plan.md",
+  "feedback": null,
   "notes": ["plan.md", "schema.json", "transcripts/"]
 }
 ```
@@ -54,6 +55,8 @@ Route on the request, then read the matching reference and follow it:
 | `/sabin plan`, "plan this", "make a plan for the ticket" | `references/plan.md` |
 | `/sabin implement`, "do the task", "implement the plan" | `references/implement.md` |
 | `/sabin review`, "review the changes" | `references/review.md` |
+| `/sabin address feedback`, "address the feedback", "work through the review" | `references/address-feedback.md` (no CLI verb - not `sabin implement`) |
+| "pull the PR comments", "get the feedback from GitHub" | `references/feedback.md` |
 | `/sabin complete`, `/sabin done`, "mark it complete", "ship it" | `references/complete.md` |
 | bare `/sabin` | orient, report the context, ask what to do |
 
@@ -77,6 +80,17 @@ path.
 **One plan per ticket**, at `plan.md` in `notesDir`. Stages are phases inside
 that file, never a second file. Re-planning edits it in place.
 
+**One feedback file per ticket**, at `feedback.md` in `notesDir`. Every review
+pass appends a round to it - a different model, a later day, comments pulled
+down from a pull request - and the implementer ticks items off as they are
+addressed. Append-only: nothing is deleted, rewritten or un-ticked. The format
+is `references/feedback.md`.
+
+**Hooks.** `sabin task update` may print the project's own instructions for the
+status it just wrote (`hooks/<status>.md`). When it prints something, that text
+is authoritative for this project - follow it. When it prints nothing, there is
+nothing extra to do; do not assume what a hook would have said.
+
 **Status** changes only through the CLI:
 
 ```bash
@@ -93,13 +107,15 @@ are any - follow them.
 | `open` | Requirements captured | Whoever files it |
 | `ready` | Planned, ready to implement | You, once a plan is agreed |
 | `in_progress` | Work underway | `sabin implement`, or you |
-| `review` | Finished and committed, awaiting the user | **You, when you finish** |
+| `review` | Finished and verified, uncommitted, awaiting a review | **You, when you finish** |
 | `completed` | Approved | **Only with the user's approval** |
 
 `review` is your ceiling. When you finish, move the task to `review` and tell
-the user it is waiting on them:
+the user it is waiting on them. The work is **not committed** at that point -
+`/sabin complete` makes the one commit, so a reviewer reads the working tree:
 
-> SABIN-0002 is in review. Say `/sabin complete` once you have verified it.
+> SABIN-0002 is in review - nothing is committed yet. Run
+> `sabin review SABIN-0002` for a fresh read, then `/sabin complete`.
 
 **The prompt scratchpad** is the user's draft space for prompts to you. Never
 read, list, or write it. Its path is deliberately absent from `sabin context`
@@ -126,13 +142,13 @@ the idea is still forming.
 
 | Command | Use |
 | --- | --- |
-| `sabin context --json` | Orient: ticket, status, branch, worktree, notes, plan |
+| `sabin context --json` | Orient: ticket, status, branch, worktree, notes, plan, feedback |
 | `sabin plan <TICKET>` | Put an agent on a ticket to plan it, in its worktree |
 | `sabin implement <TICKET>` | Put an agent on a ticket to do the work |
 | `sabin review <TICKET>` | Put an agent on a ticket to review its changes |
-| `sabin where --notes` / `--plan` | One path, for shell interpolation |
+| `sabin where --notes` / `--plan` / `--feedback` | One path, for shell interpolation |
 | `sabin task show [id]` | Read a task without knowing its directory |
 | `sabin task update <id> <status>` | Change status; prints the project hook |
 | `sabin task create "<title>" [-c <body>] [-n <id>]` | Create a task with its notes directory |
 | `sabin task list [-s <status>] [--json]` | What else is in flight |
-| `sabin notes new <name> [--template plan]` | Scaffold a note and print its path |
+| `sabin notes new <name> [--template plan\|feedback]` | Scaffold a note and print its path |

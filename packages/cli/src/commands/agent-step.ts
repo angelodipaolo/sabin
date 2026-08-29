@@ -38,6 +38,11 @@ export interface StepOptions {
  * Only implementing means "work underway". Planning happens before a task is
  * even `ready`, and reviewing happens when it is already in `review` - moving
  * either of those to `in_progress` would walk the task backwards.
+ *
+ * `implement` cannot walk one backwards either: `stepStatus` in
+ * workspace-start.ts only ever moves a task forward, so re-running it on a
+ * ticket in `review` - which is what addressing feedback looks like - leaves it
+ * there.
  */
 const STATUS_FOR_STEP: Record<WorkflowStep, TaskStatus | null> = {
   plan: null,

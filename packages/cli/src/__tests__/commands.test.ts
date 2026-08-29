@@ -6,6 +6,10 @@ import { createTask } from '../commands/create-task';
 import { updateStatus } from '../commands/update-status';
 import { listTasks } from '../commands/list-tasks';
 import { runStep } from '../commands/agent-step';
+import { showContext } from '../commands/context';
+import { notesNew } from '../commands/notes';
+import { where } from '../commands/where';
+import { open } from '../commands/open';
 
 jest.mock('chalk', () => {
   const identity = (text: string) => text;
@@ -229,5 +233,123 @@ describe('CLI commands', () => {
       const reviewed = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
       expect(reviewed.status).toBe('review');
     });
+
+    it('will not walk a task in review back to in_progress', async () => {
+      await createTask('Rewrite exporter', {});
+      await updateStatus('SABIN-0001', 'review');
+
+      // Addressing review feedback is implementation work that happens inside
+      // `review`, so the "do the work" verb must not claim it is unreviewed
+      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      const task = await parseTask(path.join(sabinDir, 'tasks', 'open', 'SABIN-0001.md'));
+      expect(task.status).toBe('review');
+      // ...and the branch is still recorded on the way through
+      expect(task.branch).toBe('me/SABIN-0001-rewrite-exporter');
+    });
+
+    it('says so when it declines the status write, and how to undo it', async () => {
+      await createTask('Rewrite exporter', {});
+      await updateStatus('SABIN-0001', 'review');
+      error.mockClear();
+
+      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      // In review the clamp is reassurance, not a problem to recover from
+      expect(logged(error)).toContain('SABIN-0001 is review; leaving it there');
+      expect(logged(error)).toContain('Addressing review feedback happens in review');
+    });
+
+    it('leaves a completed task completed, and names the way to reopen it', async () => {
+      await createTask('Rewrite exporter', {});
+      await updateStatus('SABIN-0001', 'completed');
+      error.mockClear();
+
+      await runStep('implement', 'SABIN-0001', { launch: false, noWorktree: true });
+
+      // `task list` hides completed tickets, so silently working in the
+      // worktree of one would leave the work invisible on the board
+      expect(logged(error)).toContain('SABIN-0001 is completed; leaving it there');
+      expect(logged(error)).toContain('sabin task update SABIN-0001 in_progress');
+
+      const task = await parseTask(path.join(sabinDir, 'tasks', 'completed', 'SABIN-0001.md'));
+      expect(task.status).toBe('completed');
+    });
   });
+
+  describe('where', () => {
+    it('prints the plan and feedback paths, whether or not the files exist', async () => {
+      await createTask('Update telemetry', {});
+      const notesDir = path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry');
+
+      // Both are derived, so they answer before anything has been written
+      log.mockClear();
+      await where('SABIN-0001', { plan: true });
+      expect(logged(log).trim()).toBe(path.join(notesDir, 'plan.md'));
+
+      log.mockClear();
+      await where('SABIN-0001', { feedback: true });
+      expect(logged(log).trim()).toBe(path.join(notesDir, 'feedback.md'));
+    });
+
+    it('refuses two paths at once', async () => {
+      await expect(where('SABIN-0001', { plan: true, feedback: true })).rejects.toThrow('Process exit 1');
+      expect(logged(error)).toContain('--feedback');
+    });
+  });
+
+  describe('open', () => {
+    // Every case here fails before an editor is ever launched, which is what
+    // keeps the test from needing one
+    it('points at sabin review when there is no feedback yet', async () => {
+      await createTask('Update telemetry', {});
+
+      await expect(open('SABIN-0001', { feedback: true })).rejects.toThrow('Process exit 1');
+      expect(logged(error)).toContain('feedback.md');
+      expect(logged(error)).toContain('sabin review SABIN-0001');
+    });
+
+    it('names a command that still exists when there is no worktree', async () => {
+      await createTask('Update telemetry', {});
+
+      await expect(open('SABIN-0001', { worktree: true })).rejects.toThrow('Process exit 1');
+      // `start` was removed in SABIN-0016; the hint must not send anyone to it
+      expect(logged(error)).not.toContain('sabin start');
+      expect(logged(error)).toContain('sabin implement SABIN-0001');
+    });
+  });
+
+  describe('feedback', () => {
+    it('reports feedback as null until the file exists, then its path', async () => {
+      await createTask('Update telemetry', {});
+      const notesDir = path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry');
+
+      log.mockClear();
+      await showContext({ json: true, ticket: 'SABIN-0001' });
+      expect(JSON.parse(logged(log)).feedback).toBeNull();
+
+      await fs.writeFile(path.join(notesDir, 'feedback.md'), '# Feedback: SABIN-0001\n');
+
+      log.mockClear();
+      await showContext({ json: true, ticket: 'SABIN-0001' });
+      expect(JSON.parse(logged(log)).feedback).toBe(path.join(notesDir, 'feedback.md'));
+    });
+
+    it('seeds feedback.md from the template, and leaves an existing one alone', async () => {
+      await createTask('Update telemetry', {});
+      const target = path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry', 'feedback.md');
+
+      await notesNew('feedback', { template: 'feedback', ticket: 'SABIN-0001' });
+      expect(await fs.readFile(target, 'utf8')).toContain('# Feedback: SABIN-0001');
+
+      // A second call must never overwrite rounds that are already in the file
+      await fs.writeFile(target, '# Feedback: SABIN-0001\n\n## Round 1\n');
+      log.mockClear();
+      await notesNew('feedback', { template: 'feedback', ticket: 'SABIN-0001' });
+
+      expect(await fs.readFile(target, 'utf8')).toContain('## Round 1');
+      expect(logged(log).trim()).toBe(target);
+    });
+  });
+
 });

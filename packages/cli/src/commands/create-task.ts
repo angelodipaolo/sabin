@@ -25,7 +25,7 @@ interface CreateTaskOptions {
  * Create a task and, in the same breath, its notes directory and prompt
  * scratchpad - so context can start accumulating before any work does.
  *
- * Prints the bare ID last so `sabin start $(sabin task create "...")` works.
+ * Prints the bare ID last so `sabin plan $(sabin task create "...")` works.
  */
 export async function createTask(titleArg: string | undefined, options: CreateTaskOptions): Promise<void> {
   const title = (titleArg ?? options.title ?? '').trim();

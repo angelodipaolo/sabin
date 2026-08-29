@@ -3,6 +3,7 @@ import {
   codeWorkspacePath,
   writeCodeWorkspace,
   planPath,
+  feedbackPath,
   pathExists
 } from '@sabin/core';
 import { getWorkspace, loadProject, fail } from '../workspace-context';
@@ -11,6 +12,7 @@ interface WhereOptions {
   notes?: boolean;
   prompt?: boolean;
   plan?: boolean;
+  feedback?: boolean;
   worktree?: boolean;
   task?: boolean;
   sabin?: boolean;
@@ -18,7 +20,7 @@ interface WhereOptions {
 }
 
 /** Paths that belong to a ticket */
-const TICKET_KEYS = ['notes', 'prompt', 'plan', 'worktree', 'task'] as const;
+const TICKET_KEYS = ['notes', 'prompt', 'plan', 'feedback', 'worktree', 'task'] as const;
 /** Paths that belong to the project, and so need no ticket */
 const PROJECT_KEYS = ['sabin', 'codeWorkspace'] as const;
 
@@ -29,7 +31,7 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
   const selected = [...TICKET_KEYS, ...PROJECT_KEYS].filter(key => options[key]);
 
   if (selected.length > 1) {
-    fail('Pass at most one of --notes, --prompt, --plan, --worktree, --task, --sabin, --code-workspace');
+    fail('Pass at most one of --notes, --prompt, --plan, --feedback, --worktree, --task, --sabin, --code-workspace');
   }
 
   const choice = selected[0] ?? 'notes';
@@ -51,6 +53,9 @@ export async function where(ticket: string | undefined, options: WhereOptions): 
       break;
     case 'plan':
       console.log(planPath(workspace.notesDir));
+      break;
+    case 'feedback':
+      console.log(feedbackPath(workspace.notesDir));
       break;
     case 'worktree':
       console.log(workspace.worktreeDir);
