@@ -350,6 +350,16 @@ describe('resolveWorkspace', () => {
     expect(workspace.notesDir).toBe(path.join(sabinDir, 'notes', 'SABIN-0001-update-telemetry'));
   });
 
+  it('uses the task title instead of a stale notes-directory suffix', async () => {
+    await writeTask('TASK-1234', 'Update tracking contract');
+    await fs.mkdir(path.join(sabinDir, 'notes', 'TASK-1234-task-1234'), { recursive: true });
+
+    const workspace = await resolveWorkspace({ sabinDir, config, cwd: root, ticket: 'TASK-1234' });
+
+    expect(workspace.slug).toBe('update-tracking-contract');
+    expect(workspace.notesDir).toBe(path.join(sabinDir, 'notes', 'TASK-1234-update-tracking-contract'));
+  });
+
   // A typo would otherwise resolve cleanly and send notes somewhere nothing
   // else will ever look
   it('refuses a named ticket with no task', async () => {

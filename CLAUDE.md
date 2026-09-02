@@ -59,7 +59,7 @@ direct edit. Legacy `resolved` is read as `completed`.
 default, capped at 32 chars on a word boundary, filler words dropped). The slug names the branch
 (`{prefix}/{ticket}-{slug}`), the worktree (`<repo>-worktrees/<name>`), the notes directory and the
 scratchpad. Once recorded in the task file it is fixed. Resolution order: explicit argument, recorded
-`slug`, an existing directory on disk, then the title.
+`slug`, the task title, then an existing directory on disk (as a migration fallback).
 
 **Plan**: exactly one per ticket, at `notesDir/plan.md`. Derived, never recorded. `findPlan()` is the
 only answer to "does this ticket have a plan".

@@ -261,7 +261,9 @@ export async function findPlan(notesDir: string): Promise<string | null> {
 /**
  * A ticket's descriptive suffix, resolved without touching git.
  *
- * The recorded value wins, then a directory already on disk, then the title.
+ * The recorded value wins, then the task title, then a directory already on
+ * disk. A title-derived slug is the expected name for a task that has not yet
+ * recorded its workspace; an old directory is only a migration fallback.
  * Mirrors resolveWorkspace's precedence for callers that already hold a
  * parsed task and cannot afford a git call per ticket.
  */
@@ -274,13 +276,16 @@ export async function slugForTicket(
 ): Promise<string | null> {
   if (recorded) return slugify(recorded);
 
+  const fromTitle = title ? slugFromTitle(title, config) : null;
+  if (fromTitle) return fromTitle;
+
   const notesRoot = path.resolve(sabinDir, config.notesDir ?? DEFAULT_NOTES_DIR);
   const existing = await findWorkspaceDir(notesRoot, ticket);
   if (existing && existing.length > ticket.length) {
     return existing.slice(ticket.length + 1);
   }
 
-  return title ? slugFromTitle(title, config) : null;
+  return null;
 }
 
 /**
@@ -375,7 +380,8 @@ function refFromBranch(branch: string, config: SabinConfig): TicketRef | null {
  *
  * The task file wins, so a workspace keeps the same paths for its whole life
  * even if someone types a different suffix later. Falls back to what was
- * asked for, then to whatever directory already exists on disk.
+ * asked for, then to the task title. A pre-existing directory is only used
+ * when the task has no usable title-derived slug.
  */
 async function resolveSlug(
   parsed: TicketRef,
@@ -391,8 +397,6 @@ async function resolveSlug(
 
   if (parsed.slug) return parsed.slug;
 
-  // An existing directory wins over derivation, so workspaces created before
-  // title derivation was switched on keep resolving to their own paths
   return slugForTicket(parsed.ticket, null, task?.title ?? null, sabinDir, config);
 }
 
