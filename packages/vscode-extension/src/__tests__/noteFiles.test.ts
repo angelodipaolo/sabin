@@ -1,4 +1,4 @@
-import { noteFilename, seedFor } from '../services/noteFiles';
+import { noteFilename, noteTargetName, validateNoteName, seedFor } from '../services/noteFiles';
 
 describe('noteFilename', () => {
   it('defaults a bare name to markdown', () => {
@@ -18,6 +18,51 @@ describe('noteFilename', () => {
 
   it('leaves a dotted name alone rather than doubling the extension', () => {
     expect(noteFilename('api.v2.json')).toBe('api.v2.json');
+  });
+});
+
+describe('noteTargetName', () => {
+  it('gives a file the default extension', () => {
+    expect(noteTargetName('research', false)).toBe('research.md');
+  });
+
+  it('leaves a directory alone - a folder is not a markdown file', () => {
+    expect(noteTargetName('transcripts', true)).toBe('transcripts');
+  });
+});
+
+describe('validateNoteName', () => {
+  it('accepts an ordinary name', () => {
+    expect(validateNoteName('research')).toBeUndefined();
+    expect(validateNoteName('schema.json')).toBeUndefined();
+  });
+
+  it('refuses an empty name', () => {
+    expect(validateNoteName('')).toBe('Give the note a name');
+    expect(validateNoteName('   ')).toBe('Give the note a name');
+  });
+
+  it('refuses a path separator - notes live in one directory', () => {
+    expect(validateNoteName('sub/note.md')).toBe('Notes cannot contain a path separator');
+    expect(validateNoteName('sub\\note.md')).toBe('Notes cannot contain a path separator');
+  });
+
+  it('refuses the directory entries', () => {
+    expect(validateNoteName('.')).toBe('That is not a name');
+    expect(validateNoteName('..')).toBe('That is not a name');
+  });
+
+  it('refuses a collision, comparing the name the note would land under', () => {
+    expect(validateNoteName('plan', ['plan.md'])).toBe('A file named plan.md already exists');
+  });
+
+  it('treats a collision case-insensitively, as the filesystem does', () => {
+    expect(validateNoteName('Plan.md', ['plan.md'])).toBe('A file named Plan.md already exists');
+  });
+
+  it('compares a directory rename against the raw name', () => {
+    expect(validateNoteName('logs', ['logs'], true)).toBe('A file named logs already exists');
+    expect(validateNoteName('logs', ['logs.md'], true)).toBeUndefined();
   });
 });
 

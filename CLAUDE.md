@@ -206,24 +206,58 @@ depends on the title: attribution is always the working directory.
 
 ## VS Code extension (`packages/vscode-extension/src`)
 
+**An index and a detail, never both.** The sidebar holds two views contributed to the same container
+with complementary `when` clauses on one context key, `sabin.detail` (`navigation.ts`) - so exactly
+one exists at a time and there is no third state. SABIN-0022 replaced the old side-by-side Workspace
+tree and Board, which split the vertical space and each rendered the same task list a different way.
+
+- `providers/indexProvider.ts` + `media/board.js` - the index: every uncompleted task, grouped by
+  status, completed folded away. The card is **one** click target and posts `open`; the small buttons
+  on it carry their own `data-action`, and the delegated listener resolves to the nearest one, so
+  they never stop propagation. The page posts `{command, ticket}`; paths are resolved
+  extension-side, never trusted from the page. HTML is escaped.
+- `providers/detailProvider.ts` - one ticket: scratchpad, task file, live agents, notes. A
+  `createTreeView` rather than a bare data provider, because the ticket is the view's **title** and
+  `F2` needs `.selection`. `load()` runs outside `getChildren` so the title and the title-bar buttons
+  stay right while the view is hidden.
+- `navigation.ts` - `Navigator`. `showDetail` flips the context key **before** focusing the view:
+  `.focus` on a `when`-hidden view is a silent no-op.
 - `services/workspaceService.ts` - the only door to Sabin data; everything goes through core.
-- `providers/workspaceProvider.ts` - the Workspace tree: focused task (scratchpad, task, notes) above
-  open tasks by status. Focus follows the branch until a click pins it.
-- `providers/webviewProvider.ts` + `media/board.js` - the Board. The page posts `{command, ticket}`;
-  paths are resolved extension-side, never trusted from the page. HTML is escaped.
-- `services/workspaceFolders.ts` - swaps folders 1+ to the focused ticket's worktree and notes. Folder 0
+- `services/workspaceFolders.ts` - swaps folders 1+ to the open ticket's worktree and notes. Folder 0
   is never touched (VS Code restarts the extension host), so this needs the `.code-workspace`.
 - `watchers/fileWatcher.ts` - one debounced watcher over the whole Sabin directory. `state/` gets a
   longer debounce: agent activity changes several times a turn, on every agent at once.
+
+**No focus, no pin, no branch-following.** Removed in SABIN-0022 as circular: in a Sabin
+`.code-workspace` window folder 0 is the main clone (always `main`) and folders 1+ are the worktree
+`focusFolders()` swapped in *when the user clicked a task*, so the branch only ever matched a ticket
+that had already been selected. Which ticket you are on is now simply which detail view you
+navigated to.
+
+**Notes are files, and behave like files.** Rename, Delete, Reveal in Explorer and Copy Path on
+right-click, `F2` and ⌘⌫ on the selection, all through `vscode.workspace.fs` so editors follow a
+rename and a delete lands in the Trash. `validateNoteName` (`services/noteFiles.ts`) refuses a
+collision while you are still typing. The scratchpad and the task file carry their own context values
+(`sabinPrompt`, `sabinTaskFile`) and get neither rename nor delete: **both paths are derived from the
+ticket**, so moving one would leave every other reader looking somewhere else. Before SABIN-0022 all
+three shared `sabinNote`.
+
 - **The extension never enumerates terminals.** It reads `state/sessions/*.json` through the watcher
   it already has - no polling, no `osascript`, no timer. The cost is that it lists agents, not
-  shells; the complete list is `sabin sessions` and the picker. `sabin.openInITerm` is the one
-  command that spawns anything, and the line is a capability one: **`sabin jump` and `sabin term`,
-  never `plan`, `implement` or `review`.** SABIN-0016 refused to let the extension launch agents;
-  navigating to a terminal that already exists is a different act.
+  shells; the complete list is `sabin sessions` and the picker. `sabin.gotoAgent` (`sabin jump`) and
+  `sabin.openTerminal` (`sabin term`) are the only things that spawn anything, and the line is a
+  capability one: **`jump` and `term`, never `plan`, `implement` or `review`.** SABIN-0016 refused to
+  let the extension launch agents; navigating to a terminal that already exists is a different act.
+  They were one button until SABIN-0022, where `jump` fell through to `term` on exit 3 - which meant
+  "give me a shell in the worktree" was not a thing you could ask for. Now `gotoAgent` reports that
+  there is no agent and offers the shell.
 
-Commands: `focusTask` (⌥⌘T), `openPrompt` (⌥⌘P), `openPlan` (⌥⌘L), `openTask`, `openWorktree`,
-`newTask`, `newNote`, `unpinTask`, `refreshTasks`, `openProjectWorkspace`.
+Commands: `gotoTask` (⌥⌘T - the picker matches ID, title, slug, branch and status), `showIndex`,
+`openPrompt` (⌥⌘P), `openPlan` (⌥⌘L), `openTask`, `openWorktree`, `setStatus`, `gotoAgent`,
+`openTerminal`, `newTask`, `newNote`, `renameNote` (F2), `deleteNote` (⌘⌫), `revealNote`,
+`copyTicket`, `copyPath`, `refreshTasks`, `openProjectWorkspace`. `sabin open` reaches a running
+window through the URI `vscode://angelodipaolo.sabin-vscode/focus?ticket=…`; that path is the CLI's
+(`commands/open.ts`) and stays `/focus` whatever the commands behind it are called.
 
 ## Agent integration
 

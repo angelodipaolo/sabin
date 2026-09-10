@@ -2,25 +2,33 @@ import * as vscode from 'vscode';
 import { AgentState, AgentActivity } from '@sabin/core';
 import { TASK_STATUSES, TaskStatus, isTaskStatus } from '@sabin/core';
 import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
+import { INDEX_VIEW } from '../navigation';
 
 /**
- * Messages the board sends back. Every action names a ticket; paths are
+ * Messages the index sends back. Every action names a ticket; paths are
  * resolved here rather than trusted from the webview.
  */
-type BoardMessage =
+type IndexMessage =
   | { command: 'refresh' }
   | { command: 'newTask' }
-  | { command: 'focus'; ticket: string }
-  | { command: 'openTask'; ticket: string }
+  | { command: 'open'; ticket: string }
   | { command: 'openPlan'; ticket: string }
   | { command: 'setStatus'; ticket: string; status: string }
   | { command: 'deleteTask'; ticket: string }
   | { command: 'copyPath'; ticket: string }
-  | { command: 'openInITerm'; ticket: string }
+  | { command: 'gotoAgent'; ticket: string }
+  | { command: 'openTerminal'; ticket: string }
   | { command: 'copyTicket'; ticket: string };
 
-export class SabinWebviewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'sabin.tasksView';
+/**
+ * Every uncompleted task at a glance, and the sidebar's home view.
+ *
+ * Clicking a card navigates to that ticket's detail view rather than doing
+ * something in place - the card is one target, and the small buttons on it are
+ * the exceptions that handle themselves.
+ */
+export class IndexViewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewType = INDEX_VIEW;
 
   private view?: vscode.WebviewView;
 
@@ -42,7 +50,14 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
       if (webviewView.visible) this.refresh();
     });
 
-    webviewView.webview.onDidReceiveMessage(async (message: BoardMessage) => {
+    // A `when`-hidden view is disposed and resolved again on the way back.
+    // Without this the stale handle outlives its webview, `refresh()` posts
+    // into nothing, and the board comes back empty on the second visit.
+    webviewView.onDidDispose(() => {
+      if (this.view === webviewView) this.view = undefined;
+    });
+
+    webviewView.webview.onDidReceiveMessage(async (message: IndexMessage) => {
       try {
         await this.handle(message);
       } catch (error) {
@@ -65,7 +80,7 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
     );
   }
 
-  private async handle(message: BoardMessage): Promise<void> {
+  private async handle(message: IndexMessage): Promise<void> {
     switch (message.command) {
       case 'refresh':
         this.refresh();
@@ -73,14 +88,11 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
       case 'newTask':
         await vscode.commands.executeCommand('sabin.newTask');
         return;
-      case 'focus':
-        await vscode.commands.executeCommand('sabin.focusTask', message.ticket);
-        return;
-      case 'openTask':
-        await vscode.commands.executeCommand('sabin.openTask', { ticket: message.ticket });
+      case 'open':
+        await vscode.commands.executeCommand('sabin.gotoTask', message.ticket);
         return;
       case 'openPlan':
-        await vscode.commands.executeCommand('sabin.openPlan', { ticket: message.ticket });
+        await vscode.commands.executeCommand('sabin.openPlan', message.ticket);
         return;
       case 'setStatus':
         if (!isTaskStatus(message.status)) return;
@@ -93,10 +105,13 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
       case 'copyTicket':
         await vscode.commands.executeCommand('sabin.copyTicket', message.ticket);
         return;
-      case 'openInITerm':
-        // The ticket is the only thing taken from the page, and the command
-        // resolves everything else extension-side, as paths already are
-        await vscode.commands.executeCommand('sabin.openInITerm', message.ticket);
+      // The ticket is the only thing taken from the page, and the commands
+      // resolve everything else extension-side, as paths already are
+      case 'gotoAgent':
+        await vscode.commands.executeCommand('sabin.gotoAgent', message.ticket);
+        return;
+      case 'openTerminal':
+        await vscode.commands.executeCommand('sabin.openTerminal', message.ticket);
         return;
       case 'copyPath': {
         const workspace = await this.service.find(message.ticket);
@@ -133,7 +148,7 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="${styleUri}" rel="stylesheet">
-  <title>Sabin Board</title>
+  <title>Sabin Tasks</title>
 </head>
 <body>
   <div id="board" data-statuses="${TASK_STATUSES.join(',')}"></div>

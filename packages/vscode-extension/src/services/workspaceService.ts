@@ -9,9 +9,7 @@ import {
   findTaskFile,
   findPlan,
   nextTaskId,
-  currentBranch,
   mainWorktreeRoot,
-  ticketFromBranch,
   workspacePaths,
   scaffoldWorkspace,
   slugForTicket,
@@ -56,26 +54,6 @@ export class WorkspaceService {
   private config: SabinConfig | null = null;
 
   constructor(private workspaceRoot: string) {}
-
-  /**
-   * Ticket for the branch currently checked out, if any.
-   *
-   * Checks every workspace folder, so the focused task still resolves when
-   * the window is rooted on the Sabin directory and a worktree sits alongside.
-   */
-  public async currentTicket(searchRoots: string[]): Promise<string | null> {
-    const config = await this.getConfig();
-
-    for (const root of searchRoots) {
-      const branch = await currentBranch(root);
-      if (!branch) continue;
-
-      const ticket = ticketFromBranch(branch, config);
-      if (ticket) return ticket;
-    }
-
-    return null;
-  }
 
   public async listWorkspaces(): Promise<TaskWorkspace[]> {
     const sabinDir = await this.getSabinDir();

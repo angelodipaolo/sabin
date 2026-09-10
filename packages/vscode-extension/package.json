@@ -32,9 +32,19 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "sabin.focusTask",
-        "title": "Sabin: Focus Task",
-        "icon": "$(target)"
+        "command": "sabin.gotoTask",
+        "title": "Sabin: Go to Task",
+        "icon": "$(search)"
+      },
+      {
+        "command": "sabin.showIndex",
+        "title": "Sabin: All Tasks",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "sabin.setStatus",
+        "title": "Sabin: Set Status",
+        "icon": "$(circle-large-outline)"
       },
       {
         "command": "sabin.openTask",
@@ -62,9 +72,19 @@
         "icon": "$(new-file)"
       },
       {
-        "command": "sabin.unpinTask",
-        "title": "Sabin: Follow Current Branch",
-        "icon": "$(pinned)"
+        "command": "sabin.renameNote",
+        "title": "Rename...",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sabin.deleteNote",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sabin.revealNote",
+        "title": "Reveal in Explorer",
+        "icon": "$(folder)"
       },
       {
         "command": "sabin.copyTicket",
@@ -82,8 +102,13 @@
         "icon": "$(window)"
       },
       {
-        "command": "sabin.openInITerm",
-        "title": "Sabin: Open in iTerm2",
+        "command": "sabin.gotoAgent",
+        "title": "Sabin: Go to Agent",
+        "icon": "$(target)"
+      },
+      {
+        "command": "sabin.openTerminal",
+        "title": "Sabin: Open Terminal in Worktree",
         "icon": "$(terminal)"
       }
     ],
@@ -114,100 +139,121 @@
     "views": {
       "sabin": [
         {
-          "id": "sabin.workspaceView",
-          "name": "Workspace"
+          "type": "webview",
+          "id": "sabin.indexView",
+          "name": "Tasks",
+          "when": "!sabin.detail"
         },
         {
-          "type": "webview",
-          "id": "sabin.tasksView",
-          "name": "Board"
+          "id": "sabin.detailView",
+          "name": "Task",
+          "when": "sabin.detail"
         }
       ]
     },
     "menus": {
       "view/title": [
         {
-          "command": "sabin.newNote",
-          "when": "view == sabin.workspaceView",
+          "command": "sabin.newTask",
+          "when": "view == sabin.indexView",
           "group": "navigation@0"
         },
         {
-          "command": "sabin.focusTask",
-          "when": "view == sabin.workspaceView",
+          "command": "sabin.gotoTask",
+          "when": "view == sabin.indexView",
           "group": "navigation@1"
         },
         {
-          "command": "sabin.unpinTask",
-          "when": "view == sabin.workspaceView",
+          "command": "sabin.refreshTasks",
+          "when": "view == sabin.indexView",
           "group": "navigation@2"
         },
         {
-          "command": "sabin.refreshTasks",
-          "when": "view == sabin.workspaceView",
+          "command": "sabin.showIndex",
+          "when": "view == sabin.detailView",
+          "group": "navigation@0"
+        },
+        {
+          "command": "sabin.gotoAgent",
+          "when": "view == sabin.detailView && sabin.detailHasAgent",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sabin.openTerminal",
+          "when": "view == sabin.detailView && sabin.detailHasWorktree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sabin.newNote",
+          "when": "view == sabin.detailView",
           "group": "navigation@3"
         },
         {
-          "command": "sabin.newTask",
-          "when": "view == sabin.tasksView",
-          "group": "navigation"
+          "command": "sabin.setStatus",
+          "when": "view == sabin.detailView",
+          "group": "1_task@0"
+        },
+        {
+          "command": "sabin.openWorktree",
+          "when": "view == sabin.detailView && sabin.detailHasWorktree",
+          "group": "1_task@1"
+        },
+        {
+          "command": "sabin.copyTicket",
+          "when": "view == sabin.detailView",
+          "group": "1_task@2"
         },
         {
           "command": "sabin.refreshTasks",
-          "when": "view == sabin.tasksView",
-          "group": "navigation"
+          "when": "view == sabin.detailView",
+          "group": "9_refresh@0"
         }
       ],
       "view/item/context": [
         {
-          "command": "sabin.copyTicket",
-          "when": "view == sabin.workspaceView && viewItem == sabinTask",
+          "command": "sabin.gotoAgent",
+          "when": "view == sabin.detailView && viewItem == sabinSession",
           "group": "inline@0"
         },
         {
-          "command": "sabin.copyTicket",
-          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "sabin@0"
+          "command": "sabin.revealNote",
+          "when": "view == sabin.detailView && viewItem =~ /^sabin(Note|NotesDir|TaskFile|Prompt)$/",
+          "group": "5_reveal@0"
         },
         {
           "command": "sabin.copyPath",
-          "when": "view == sabin.workspaceView && viewItem =~ /^sabin(Note|NotesDir|Task|Focused)$/",
-          "group": "sabin@1"
+          "when": "view == sabin.detailView && viewItem =~ /^sabin(Note|NotesDir|TaskFile|Prompt)$/",
+          "group": "5_reveal@1"
         },
         {
-          "command": "sabin.newNote",
-          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "inline@1"
+          "command": "sabin.renameNote",
+          "when": "view == sabin.detailView && viewItem =~ /^sabin(Note|NotesDir)$/",
+          "group": "7_modification@0"
         },
         {
-          "command": "sabin.openPlan",
-          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "inline@2"
+          "command": "sabin.deleteNote",
+          "when": "view == sabin.detailView && viewItem =~ /^sabin(Note|NotesDir)$/",
+          "group": "7_modification@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sabin.renameNote",
+          "when": "false"
         },
         {
-          "command": "sabin.openWorktree",
-          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "inline@3"
+          "command": "sabin.deleteNote",
+          "when": "false"
         },
         {
-          "command": "sabin.openInITerm",
-          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
-          "group": "inline@0"
-        },
-        {
-          "command": "sabin.openInITerm",
-          "when": "view == sabin.workspaceView && viewItem == sabinTask",
-          "group": "inline@0"
-        },
-        {
-          "command": "sabin.openInITerm",
-          "when": "view == sabin.workspaceView && viewItem == sabinSession",
-          "group": "inline@0"
+          "command": "sabin.revealNote",
+          "when": "false"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "sabin.focusTask",
+        "command": "sabin.gotoTask",
         "key": "alt+cmd+t",
         "mac": "alt+cmd+t",
         "win": "alt+ctrl+t",
@@ -226,6 +272,17 @@
         "mac": "alt+cmd+l",
         "win": "alt+ctrl+l",
         "linux": "alt+ctrl+l"
+      },
+      {
+        "command": "sabin.renameNote",
+        "key": "f2",
+        "when": "focusedView == sabin.detailView"
+      },
+      {
+        "command": "sabin.deleteNote",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == sabin.detailView"
       }
     ]
   },

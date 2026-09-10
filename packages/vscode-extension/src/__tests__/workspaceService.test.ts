@@ -91,32 +91,37 @@ describe('WorkspaceService', () => {
 });
 
 describe('ticketFrom', () => {
-  const focused = () => 'SABIN-FOCUSED';
+  const current = () => 'SABIN-CURRENT';
   const node = (ticket?: string) =>
     ({ workspace: ticket ? { ticket } : undefined }) as any;
 
-  it('falls back to the focused task from the command palette', () => {
-    expect(ticketFrom(undefined, focused)).toBe('SABIN-FOCUSED');
+  it('falls back to the open task from the command palette', () => {
+    expect(ticketFrom(undefined, current)).toBe('SABIN-CURRENT');
   });
 
-  it('reads the ticket off a focused node', () => {
-    expect(ticketFrom(node('SABIN-0017'), focused)).toBe('SABIN-0017');
-  });
-
-  it('reads the ticket off a task row', () => {
-    expect(ticketFrom(node('SABIN-0020'), focused)).toBe('SABIN-0020');
+  it('reads the ticket off a note row', () => {
+    expect(ticketFrom(node('SABIN-0017'), current)).toBe('SABIN-0017');
   });
 
   it('reads the ticket off a session row', () => {
-    // Session nodes carry the same workspace as their parent task
-    expect(ticketFrom(node('SABIN-0019'), focused)).toBe('SABIN-0019');
+    // Session nodes carry the same workspace as the ticket they belong to
+    expect(ticketFrom(node('SABIN-0019'), current)).toBe('SABIN-0019');
   });
 
-  it('takes a plain string, as the board sends', () => {
-    expect(ticketFrom('SABIN-0012', focused)).toBe('SABIN-0012');
+  it('takes a plain string, as the index sends', () => {
+    expect(ticketFrom('SABIN-0012', current)).toBe('SABIN-0012');
   });
 
-  it('has no ticket when a node carries none and nothing is focused', () => {
+  it('takes a bare { ticket }, as internal callers send', () => {
+    expect(ticketFrom({ ticket: 'SABIN-0022' }, current)).toBe('SABIN-0022');
+  });
+
+  it('prefers a node workspace over a bare ticket on the same object', () => {
+    expect(ticketFrom({ ticket: 'SABIN-0001', workspace: { ticket: 'SABIN-0002' } }, current))
+      .toBe('SABIN-0002');
+  });
+
+  it('has no ticket when a node carries none and nothing is open', () => {
     expect(ticketFrom(node(), () => undefined)).toBeUndefined();
   });
 });
