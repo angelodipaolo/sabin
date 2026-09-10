@@ -1,7 +1,7 @@
 # Sabin Claude Code Plugin
 
 Ships the `sabin` skill: the workflow contract an agent follows in a Sabin
-project (orient, notes, plan, implement, review, complete).
+project (orient, notes, plan, implement, review, address feedback, complete).
 
 ## Prerequisites
 
@@ -32,8 +32,18 @@ with a `.sabin` link:
 - `/sabin create` - expand a rough idea into a task
 - `/sabin plan` - write the ticket's plan
 - `/sabin implement` - do the work, end in `review`
-- `/sabin review` - review the diff against the acceptance criteria
-- `/sabin complete` - approve: mark completed and follow the project's hook
+- `/sabin review` - a fresh agent reads the uncommitted work against the
+  acceptance criteria and writes what it finds to the ticket's `feedback.md`
+- `/sabin address feedback` - work through the open items and tick them off
+- `/sabin complete` - approve: make the one commit, mark completed and follow
+  the project's hook
+
+**Nothing is committed until `/sabin complete`.** A ticket in `review` has a
+deliberately dirty worktree - that is what lets a fresh reviewer read the actual
+working state rather than a diff of something already sealed. Findings
+accumulate as rounds in one `feedback.md` per ticket, so a second model, a later
+day, or comments pulled down from a pull request all append to the same
+worklist.
 
 ## Uninstallation
 

@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import chalk from 'chalk';
-import { parseTask, pathExists, findPlan, ticketFromBranch } from '@sabin/core';
+import { parseTask, pathExists, findPlan, findFeedback, ticketFromBranch } from '@sabin/core';
 import { getWorkspace } from '../workspace-context';
 
 interface ContextOptions {
@@ -29,6 +29,7 @@ export async function showContext(options: ContextOptions): Promise<void> {
   const notes = await listNotes(workspace.notesDir);
   const worktreeExists = await pathExists(workspace.worktreeDir);
   const plan = await findPlan(workspace.notesDir);
+  const feedback = await findFeedback(workspace.notesDir);
 
   if (options.json) {
     console.log(JSON.stringify({
@@ -43,6 +44,7 @@ export async function showContext(options: ContextOptions): Promise<void> {
       notesDir: workspace.notesDir,
       taskFile: workspace.taskFile,
       plan,
+      feedback,
       notes
     }, null, 2));
     return;
@@ -55,6 +57,7 @@ export async function showContext(options: ContextOptions): Promise<void> {
   console.log(`  ${chalk.gray('Task:')}     ${workspace.taskFile ?? chalk.yellow('(no task file)')}`);
   console.log(`  ${chalk.gray('Notes:')}    ${chalk.cyan(workspace.notesDir)}`);
   console.log(`  ${chalk.gray('Plan:')}     ${plan ?? chalk.yellow('(none)')}`);
+  console.log(`  ${chalk.gray('Feedback:')} ${feedback ?? chalk.yellow('(none)')}`);
   console.log(`  ${chalk.gray('Prompt:')}   ${workspace.promptFile}`);
 
   if (notes.length > 0) {

@@ -26,13 +26,20 @@ if they are not there and starts the agent inside them, in a new iTerm2 tab.
 
 The agent follows the **sabin skill**: it orients with `sabin context --json`,
 reads the ticket's notes, writes plans and research there, and moves the task
-to `review` when it has committed. You review and say `/sabin complete`; the
-agent marks it completed and follows your project's completion hook - "push
-and open a PR", say. Worktrees are never removed for you.
+to `review` when the work is done and verified - **uncommitted**, so a fresh
+reviewer reads the working tree rather than a sealed diff. `sabin review`
+starts that reviewer; it writes what it finds to one `feedback.md` in the
+ticket's notes, and `/sabin address feedback` works through it and ticks items
+off. Every later pass - a different model, another day, comments pulled down
+from a pull request with `gh` - appends a round to that same file, so the
+worklist survives the session that found it.
+
+You say `/sabin complete`. That is where the one commit happens, and where the
+task moves to `completed` and your project's completion hook runs - "push and
+open a PR", say. Worktrees are never removed for you.
 
 Optional steps in between, all via the skill: `/sabin create` to expand a
-rough idea into a task, `/sabin plan` to write a plan, `/sabin review` to have
-a fresh agent review the diff.
+rough idea into a task, `/sabin plan` to write a plan.
 
 ### Statuses
 
@@ -41,7 +48,7 @@ a fresh agent review the diff.
 | `open` | Requirements captured |
 | `ready` | Planned, ready to implement |
 | `in_progress` | An agent (or you) is on it |
-| `review` | Finished and committed, waiting on you |
+| `review` | Finished and verified, uncommitted, waiting on a review |
 | `completed` | Approved; file moves to `tasks/completed/` |
 
 ## Layout

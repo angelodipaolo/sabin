@@ -26,6 +26,18 @@ const PLAN_TEMPLATE = `# Implementation Plan: {title}
 `;
 
 /**
+ * The feedback file starts as a title and a pointer, nothing more.
+ *
+ * The format belongs to skills/sabin/references/feedback.md, and a fat
+ * template here would be a second copy of it - free to drift, and stamped into
+ * every ticket before anyone has reviewed anything.
+ */
+const FEEDBACK_TEMPLATE = `# Feedback: {title}
+
+<!-- One round per review pass, append-only. Format: sabin skill, references/feedback.md -->
+`;
+
+/**
  * Seed content for a new note.
  *
  * Notes hold any context an agent might read - JSON, YAML, CSV, logs - so
@@ -77,7 +89,9 @@ export async function notesNew(name: string, options: NotesNewOptions): Promise<
 
   const body = options.template === 'plan'
     ? PLAN_TEMPLATE.replace('{title}', workspace.ticket)
-    : seedFor(filename);
+    : options.template === 'feedback'
+      ? FEEDBACK_TEMPLATE.replace('{title}', workspace.ticket)
+      : seedFor(filename);
 
   await fs.writeFile(target, body);
   console.error(chalk.green(`Created ${filename} in ${workspace.ticket} notes`));

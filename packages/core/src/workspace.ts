@@ -259,6 +259,27 @@ export async function findPlan(notesDir: string): Promise<string | null> {
 }
 
 /**
+ * A ticket has exactly one feedback file, beside its plan.
+ *
+ * Every review pass - a different model, a later day, comments pulled down
+ * from a pull request - appends a round to this one file, so "what still needs
+ * doing" survives the session that found it.
+ */
+export const FEEDBACK_FILENAME = 'feedback.md';
+
+export function feedbackPath(notesDir: string): string {
+  return path.join(notesDir, FEEDBACK_FILENAME);
+}
+
+/**
+ * The ticket's feedback file, or null when nothing has been reviewed yet
+ */
+export async function findFeedback(notesDir: string): Promise<string | null> {
+  const file = feedbackPath(notesDir);
+  return (await pathExists(file)) ? file : null;
+}
+
+/**
  * A ticket's descriptive suffix, resolved without touching git.
  *
  * The recorded value wins, then the task title, then a directory already on

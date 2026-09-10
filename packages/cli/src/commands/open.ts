@@ -5,6 +5,7 @@ import {
   writeCodeWorkspace,
   scaffoldWorkspace,
   planPath,
+  feedbackPath,
   pathExists
 } from '@sabin/core';
 import { execFile } from 'child_process';
@@ -22,6 +23,7 @@ interface OpenOptions {
   notes?: boolean;
   prompt?: boolean;
   plan?: boolean;
+  feedback?: boolean;
   task?: boolean;
   sabin?: boolean;
   editor?: string;
@@ -29,7 +31,7 @@ interface OpenOptions {
   reveal?: boolean;
 }
 
-const TARGETS = ['worktree', 'notes', 'prompt', 'plan', 'task', 'sabin'] as const;
+const TARGETS = ['worktree', 'notes', 'prompt', 'plan', 'feedback', 'task', 'sabin'] as const;
 
 /**
  * Open the project - or one part of a ticket - in the editor.
@@ -51,8 +53,9 @@ export async function open(ticket: string | undefined, options: OpenOptions): Pr
     : await projectWorkspace();
 
   if (!(await pathExists(target))) {
-    const hint = selected[0] === 'worktree' ? `\nRun: sabin start ${ticket ?? '<ticket>'}` :
-      selected[0] === 'plan' ? `\nNo plan yet. Ask an agent: /sabin plan` : '';
+    const hint = selected[0] === 'worktree' ? `\nNo worktree yet. Run: sabin implement ${ticket ?? '<ticket>'} --no-launch` :
+      selected[0] === 'plan' ? `\nNo plan yet. Ask an agent: /sabin plan` :
+      selected[0] === 'feedback' ? `\nNo feedback yet. Run: sabin review ${ticket ?? '<ticket>'}` : '';
     fail(`Nothing to open at ${target}${hint}`);
   }
 
@@ -123,5 +126,6 @@ async function ticketTarget(
     case 'notes': return workspace.notesDir;
     case 'prompt': return workspace.promptFile;
     case 'plan': return planPath(workspace.notesDir);
+    case 'feedback': return feedbackPath(workspace.notesDir);
   }
 }
