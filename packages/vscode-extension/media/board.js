@@ -28,8 +28,31 @@
 
   const ICON_PLAN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
   const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  const ICON_TERMINAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>';
   const ICON_TICKET = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>';
   const ICON_DELETE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+
+const ACTIVITY_LABEL = {
+  waiting: 'waiting for you',
+  busy: 'busy',
+  idle: 'idle'
+};
+
+/**
+ * A dot for what the ticket's agents are doing, or nothing.
+ *
+ * Nothing is the honest answer when no hook has reported: an agent with no
+ * hooks installed is not idle, it is unknown, and a grey dot claiming
+ * otherwise would be worse than no dot.
+ */
+function renderActivity(task) {
+  if (!task.activity) return '';
+
+  const label = ACTIVITY_LABEL[task.activity] || task.activity;
+  const count = task.agents > 1 ? ` (${task.agents})` : '';
+  return `<span class="activity activity-${task.activity}" title="${label}${count}"></span>`;
+}
+
 
   function renderCard(task) {
     const ticket = escapeHtml(task.ticket);
@@ -43,10 +66,12 @@
         <div class="card-header">
           <div class="card-id">
             <button class="ticket" data-action="focus" data-ticket="${ticket}" title="Focus this task">${ticket}</button>
+            ${renderActivity(task)}
             ${task.hasPlan ? `<button class="icon plan" data-action="openPlan" data-ticket="${ticket}" title="Open plan">${ICON_PLAN}</button>` : ''}
           </div>
           <div class="card-actions">
             <span class="secondary">
+              ${task.hasWorktree ? `<button class="icon" data-action="openInITerm" data-ticket="${ticket}" title="Open in iTerm2">${ICON_TERMINAL}</button>` : ''}
               <button class="icon" data-action="copyTicket" data-ticket="${ticket}" title="Copy ticket ID">${ICON_TICKET}</button>
               <button class="icon" data-action="copyPath" data-ticket="${ticket}" title="Copy task path">${ICON_COPY}</button>
               <button class="icon danger" data-action="deleteTask" data-ticket="${ticket}" title="Delete task">${ICON_DELETE}</button>
@@ -114,6 +139,7 @@
       case 'openTask': post({ command: 'openTask', ticket }); break;
       case 'openPlan': post({ command: 'openPlan', ticket }); break;
       case 'copyTicket': post({ command: 'copyTicket', ticket }); break;
+      case 'openInITerm': post({ command: 'openInITerm', ticket }); break;
       case 'copyPath': post({ command: 'copyPath', ticket }); break;
       case 'deleteTask': post({ command: 'deleteTask', ticket }); break;
       case 'setStatus': post({ command: 'setStatus', ticket, status }); closeMenus(); break;

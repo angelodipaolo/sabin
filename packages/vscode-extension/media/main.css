@@ -227,3 +227,37 @@ body {
 .status-option .status-badge {
   pointer-events: none;
 }
+
+/* Agent activity, as a dot beside the ticket. Only ever shown when a hook
+   has actually reported something - absence is not a state. */
+.activity {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.activity-waiting {
+  background: var(--vscode-charts-yellow, #cca700);
+  /* The one that wants your attention, so it is the one that moves */
+  animation: sabin-pulse 1.6s ease-in-out infinite;
+}
+
+.activity-busy {
+  background: var(--vscode-charts-blue, #3794ff);
+}
+
+.activity-idle {
+  background: var(--vscode-descriptionForeground, #888);
+  opacity: 0.6;
+}
+
+@keyframes sabin-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-waiting { animation: none; }
+}

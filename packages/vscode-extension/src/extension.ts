@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import { execFile } from 'child_process';
 import * as path from 'path';
 import { SabinWebviewProvider } from './providers/webviewProvider';
 import { SabinFileWatcher } from './watchers/fileWatcher';
 import { WorkspaceService, TaskWorkspace } from './services/workspaceService';
 import { WorkspaceTreeProvider, WorkspaceNode } from './providers/workspaceProvider';
+import { ticketFrom } from './services/ticket';
 import { focusFolders } from './services/workspaceFolders';
 import { noteFilename, seedFor } from './services/noteFiles';
 
@@ -37,7 +39,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     new SabinFileWatcher(sabinDir, refresh),
     // Focus follows the branch, so a checkout in any root updates the view
-    vscode.workspace.onDidChangeWorkspaceFolders(() => tree.refresh())
+    vscode.workspace.onDidChangeWorkspaceFolders(() => tree.refresh()),
+
+    // A process dying writes no file, so the watcher never hears about it and
+    // a killed agent's badge would sit there until something unrelated
+    // changed. Re-reading when the window comes back into focus fixes it at
+    // the only moment it matters - when you are looking at it - and costs no
+    // timer.
+    vscode.window.onDidChangeWindowState(state => {
+      if (state.focused) refresh();
+    })
   );
 
   registerCommands(context, service, tree, refresh);
@@ -71,6 +82,27 @@ function registerDeepLink(tree: WorkspaceTreeProvider): vscode.Disposable {
   });
 }
 
+/** Exit code `sabin jump` uses for "there is nothing to focus" */
+const NO_SESSIONS = 3;
+
+interface RunResult {
+  ok: boolean;
+  code: number | null;
+  message: string;
+}
+
+function run(command: string, args: string[]): Promise<RunResult> {
+  return new Promise(resolve => {
+    execFile(command, args, (error, _stdout, stderr) => {
+      if (!error) return resolve({ ok: true, code: 0, message: '' });
+      const code = typeof (error as { code?: unknown }).code === 'number'
+        ? (error as unknown as { code: number }).code
+        : null;
+      resolve({ ok: false, code, message: (stderr || error.message).trim() });
+    });
+  });
+}
+
 function registerCommands(
   context: vscode.ExtensionContext,
   service: WorkspaceService,
@@ -95,6 +127,47 @@ function registerCommands(
         vscode.window.showErrorMessage(`Sabin: ${error instanceof Error ? error.message : error}`);
       }
     }));
+
+  /**
+   * The VS Code → iTerm2 handoff, and the only thing this extension spawns.
+   *
+   * SABIN-0016 refused to let the extension launch agents and asked that any
+   * reversal be deliberate rather than slipped in behind a button. This is
+   * the deliberate version, and the line it draws is a capability one:
+   * **`sabin jump` and `sabin term`, never `plan`, `implement` or `review`.**
+   * Navigating to a terminal that already exists is not the same act as
+   * starting an autonomous agent, and only the second one was refused.
+   */
+  register('sabin.openInITerm', async (arg?: WorkspaceNode | string) => {
+    const target = ticketFrom(arg, () => focusedOrWarn()?.ticket);
+    if (!target) return;
+
+    const sabin = vscode.workspace.getConfiguration('sabin').get<string>('cliPath', 'sabin');
+
+    // `--any` because a child process has no terminal to show a picker in:
+    // without it, a ticket with two agents exits non-zero and we would open a
+    // third tab instead of focusing one of them
+    const jumped = await run(sabin, ['jump', target, '--any']);
+    if (jumped.ok) return;
+
+    // Exit 3 is specifically "nothing to focus" - anything else is a real
+    // failure and opening a shell would paper over it
+    if (jumped.code !== NO_SESSIONS) {
+      vscode.window.showErrorMessage(
+        `Sabin: could not reach iTerm2 for ${target}. ` +
+        (jumped.message ? jumped.message : `Is \`${sabin}\` on PATH? Set sabin.cliPath if not.`)
+      );
+      return;
+    }
+
+    const opened = await run(sabin, ['term', target]);
+    if (!opened.ok) {
+      vscode.window.showErrorMessage(
+        `Sabin: could not open a terminal for ${target}. ` +
+        (opened.message || `Is \`${sabin}\` on PATH? Set sabin.cliPath if not.`)
+      );
+    }
+  });
 
   register('sabin.refreshTasks', () => {
     service.invalidate();
@@ -184,7 +257,7 @@ function registerCommands(
   // after `sabin implement`, and a note's path is what you paste into a shell
   // or hand to an agent. Retyping either was the reported friction.
   register('sabin.copyTicket', async (arg?: WorkspaceNode | string) => {
-    const ticket = typeof arg === 'string' ? arg : arg?.workspace?.ticket ?? tree.focused()?.ticket;
+    const ticket = ticketFrom(arg, () => tree.focused()?.ticket);
     if (!ticket) {
       vscode.window.showWarningMessage('No task is focused.');
       return;

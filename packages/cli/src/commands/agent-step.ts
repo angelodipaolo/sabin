@@ -11,11 +11,15 @@ import {
   SabinConfig,
   TaskStatus,
   Workspace,
-  WorkflowStep
+  WorkflowStep,
+  clearAgentState,
+  currentSessionId
 } from '@sabin/core';
+import { sessionTitle } from '@sabin/core';
 import { getWorkspace, fail } from '../workspace-context';
 import { ensureWorkspace } from '../workspace-start';
-import { isITerm, labelTab, openTab, shellQuote } from '../iterm';
+import { ticketTerminals } from '../terminal-context';
+import { isITerm, labelTab, shellQuote } from '../iterm';
 
 export interface StepOptions {
   agent?: string;
@@ -26,6 +30,8 @@ export interface StepOptions {
   launch?: boolean;
   tab?: boolean;
   here?: boolean;
+  /** Force a new window instead of joining the ticket's */
+  window?: boolean;
   yolo?: boolean;
   supervised?: boolean;
   /** Skip worktree and branch creation. Tests only - no flag sets it. */
@@ -63,7 +69,7 @@ export async function runStep(
   ticketArg: string | undefined,
   options: StepOptions
 ): Promise<void> {
-  const { workspace, config } = await getWorkspace(ticketArg);
+  const { workspace, config, projectRoot, sabinDir } = await getWorkspace(ticketArg);
 
   // A task is what there is to work from. `sabin task create` makes them;
   // these verbs never invent one.
@@ -102,7 +108,7 @@ export async function runStep(
   const autonomous = wantsAutonomy(options, config);
 
   if (inNewTab(options)) {
-    await launchInTab(step, workspace, cwd, agent, autonomous);
+    await launchInTab(step, workspace, cwd, agent, autonomous, projectRoot, config, options.window);
     return;
   }
 
@@ -118,10 +124,21 @@ export async function runStep(
     autonomous
   );
 
-  labelTab(workspace.name);
+  labelTab(sessionTitle(workspace.ticket, agent.name));
   console.error(chalk.gray(`▸ ${agent.name} ${step} ${workspace.ticket}${autonomous ? ' (autonomous)' : ''}`));
 
-  await launch(agent.definition, argv, cwd);
+  // The activity hooks run inside this agent and read these back, so a state
+  // file can say "claude on SABIN-0017" without having to guess either
+  await launch(
+    agent.definition,
+    argv,
+    cwd,
+    { SABIN_AGENT: agent.name, SABIN_TICKET: workspace.ticket },
+    // A killed agent never runs its SessionEnd hook, but we are its parent
+    // and always see it go. Clearing here is what stops a `kill -9` leaving a
+    // badge on the board for ever.
+    () => clearAgentState(sabinDir, currentSessionId() ?? '')
+  );
 }
 
 /**
@@ -147,7 +164,10 @@ async function launchInTab(
   workspace: Workspace,
   cwd: string,
   agent: ResolvedAgent,
-  autonomous: boolean
+  autonomous: boolean,
+  projectRoot: string,
+  config: SabinConfig,
+  newWindow?: boolean
 ): Promise<void> {
   if (!isITerm()) fail('--tab needs iTerm2 (TERM_PROGRAM is not iTerm.app).');
 
@@ -158,9 +178,22 @@ async function launchInTab(
     autonomous ? '--yolo' : '--supervised'
   ].map(shellQuote);
 
-  await openTab(cwd, argv.join(' '));
+  // The ticket's own window, so plan, implement and review end up beside each
+  // other rather than scattered along one flat tab bar
+  const { driver, windowId } = await ticketTerminals(workspace.ticket, projectRoot, config);
+
+  await driver.openTab({
+    cwd,
+    command: argv.join(' '),
+    title: sessionTitle(workspace.ticket, agent.name),
+    windowId: windowId ?? undefined,
+    newWindow,
+    ticket: workspace.ticket
+  });
+
+  const where = newWindow ? 'a new window' : windowId ? `${workspace.ticket}'s window` : 'a new window';
   console.error(chalk.gray(
-    `▸ ${agent.name} ${step} ${workspace.ticket} in a new tab${autonomous ? ' (autonomous)' : ''}`
+    `▸ ${agent.name} ${step} ${workspace.ticket} in ${where}${autonomous ? ' (autonomous)' : ''}`
   ));
 }
 
@@ -210,12 +243,18 @@ async function workingDirectory(worktreeDir: string, mainRoot: string | null): P
   return (await pathExists(worktreeDir)) ? worktreeDir : mainRoot ?? process.cwd();
 }
 
-function launch(definition: AgentDefinition, argv: string[], cwd: string): Promise<void> {
+function launch(
+  definition: AgentDefinition,
+  argv: string[],
+  cwd: string,
+  environment: NodeJS.ProcessEnv = {},
+  onExit: () => Promise<void> | void = () => {}
+): Promise<void> {
   return new Promise(resolve => {
     const child = spawn(definition.command, argv, {
       cwd,
       stdio: 'inherit',
-      env: { ...process.env, ...(definition.env ?? {}) }
+      env: { ...process.env, ...environment, ...(definition.env ?? {}) }
     });
 
     // The agent owns the terminal, so it owns Ctrl-C too. Without this the
@@ -237,9 +276,13 @@ function launch(definition: AgentDefinition, argv: string[], cwd: string): Promi
 
     child.on('exit', (code, signal) => {
       process.off('SIGINT', ignore);
-      resolve();
-      // Carry the agent's outcome, so `sabin implement ... && ...` behaves
-      process.exit(signal ? 1 : code ?? 0);
+      void Promise.resolve(onExit())
+        .catch(() => {})
+        .then(() => {
+          resolve();
+          // Carry the agent's outcome, so `sabin implement ... && ...` behaves
+          process.exit(signal ? 1 : code ?? 0);
+        });
     });
   });
 }

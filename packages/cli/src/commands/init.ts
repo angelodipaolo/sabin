@@ -11,6 +11,7 @@ import {
   writeSabinLink,
   writeCodeWorkspace,
   denyPromptsAccess,
+  installActivityHooks,
   addGitExclude,
   hookPath,
   git,
@@ -18,6 +19,8 @@ import {
 } from '@sabin/core';
 
 interface InitOptions {
+  /** Also install the agent activity hooks */
+  hooks?: boolean;
   prefix?: string;
   shared?: string;
   branchPrefix?: string;
@@ -50,6 +53,13 @@ export async function initProject(options: InitOptions): Promise<void> {
   const projectRoot = process.cwd();
 
   try {
+    // `--hooks` on a repo that is already set up means "just add the hooks",
+    // which has to be answered before the guard below turns it into an error
+    if (options.hooks && (await checkSabinType(projectRoot)) !== 'none') {
+      await reportHooks(await installActivityHooks(projectRoot));
+      return;
+    }
+
     if ((await checkSabinType(projectRoot)) !== 'none') {
       throw new Error(
         `.sabin already exists in this directory.\n` +
@@ -73,6 +83,8 @@ export async function initProject(options: InitOptions): Promise<void> {
     const promptsDir = path.resolve(sabinDir, (await readConfig(sabinDir)).promptsDir ?? 'prompts');
     const denied = await denyPromptsAccess(projectRoot, promptsDir);
 
+    if (options.hooks) await reportHooks(await installActivityHooks(projectRoot));
+
     await writeSabinLink(projectRoot, sabinDir);
     const excluded = options.exclude !== false && await addGitExclude(projectRoot);
 
@@ -87,6 +99,17 @@ export async function initProject(options: InitOptions): Promise<void> {
     console.error(chalk.red(error.message));
     process.exit(1);
   }
+}
+
+async function reportHooks(result: { path: string; added: string[] }): Promise<void> {
+  if (result.added.length === 0) {
+    console.log(chalk.gray(`Activity hooks already installed in ${result.path}`));
+    return;
+  }
+
+  console.log(chalk.green(`Activity hooks installed`) + chalk.gray(` in ${result.path}`));
+  console.log(chalk.gray(`  ${result.added.join(', ')} → sabin agent-state`));
+  console.log(chalk.gray('  Agents already running pick them up on their next start.'));
 }
 
 async function chooseLocation(projectRoot: string, options: InitOptions): Promise<string> {

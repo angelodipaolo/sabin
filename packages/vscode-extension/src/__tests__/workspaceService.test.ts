@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { WorkspaceService } from '../services/workspaceService';
+import { ticketFrom } from '../services/ticket';
 
 jest.mock('vscode');
 
@@ -86,5 +87,36 @@ describe('WorkspaceService', () => {
 
     const tickets = (await service.listWorkspaces()).map(w => w.ticket);
     expect(tickets).toEqual(['SABIN-0001']);
+  });
+});
+
+describe('ticketFrom', () => {
+  const focused = () => 'SABIN-FOCUSED';
+  const node = (ticket?: string) =>
+    ({ workspace: ticket ? { ticket } : undefined }) as any;
+
+  it('falls back to the focused task from the command palette', () => {
+    expect(ticketFrom(undefined, focused)).toBe('SABIN-FOCUSED');
+  });
+
+  it('reads the ticket off a focused node', () => {
+    expect(ticketFrom(node('SABIN-0017'), focused)).toBe('SABIN-0017');
+  });
+
+  it('reads the ticket off a task row', () => {
+    expect(ticketFrom(node('SABIN-0020'), focused)).toBe('SABIN-0020');
+  });
+
+  it('reads the ticket off a session row', () => {
+    // Session nodes carry the same workspace as their parent task
+    expect(ticketFrom(node('SABIN-0019'), focused)).toBe('SABIN-0019');
+  });
+
+  it('takes a plain string, as the board sends', () => {
+    expect(ticketFrom('SABIN-0012', focused)).toBe('SABIN-0012');
+  });
+
+  it('has no ticket when a node carries none and nothing is focused', () => {
+    expect(ticketFrom(node(), () => undefined)).toBeUndefined();
   });
 });

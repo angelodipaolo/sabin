@@ -13,6 +13,10 @@ import { showTask } from './commands/show-task';
 import { runStep, StepOptions } from './commands/agent-step';
 import { notesNew } from './commands/notes';
 import { open } from './commands/open';
+import { sessions } from './commands/sessions';
+import { jump } from './commands/jump';
+import { term } from './commands/term';
+import { agentState } from './commands/agent-state';
 
 const program = new Command();
 
@@ -29,7 +33,14 @@ program
   .option('-b, --branch-prefix <prefix>', 'Personal branch prefix, e.g. angelo')
   .option('-w, --worktrees <path>', 'Worktree root, relative to the repo')
   .option('--no-exclude', 'Do not add .sabin to .git/info/exclude')
+  .option('--hooks', 'Install agent hooks that report busy/waiting/idle to Sabin')
   .action(initProject);
+
+// Plumbing: agent hooks call this, nobody types it
+program
+  .command('agent-state <activity>', { hidden: true })
+  .description('Record what the agent in this terminal is doing')
+  .action(agentState);
 
 program
   .command('link')
@@ -61,6 +72,7 @@ for (const { step, summary } of STEPS) {
     .option('--codex', 'Shorthand for --agent codex')
     .option('--tab', 'Launch in a new iTerm2 tab (the default under iTerm2)')
     .option('--here', 'Launch in this tab instead of a new one')
+    .option('--window', "Open a new window instead of joining the ticket's")
     .option('--yolo', 'Let the agent work without asking permission')
     .option('--supervised', 'Make the agent ask, overriding agents.autonomous')
     .option('--print', 'Print the composed prompt and exit, without starting anything')
@@ -68,6 +80,31 @@ for (const { step, summary } of STEPS) {
     .option('--no-start', 'Do not create the worktree or change status first')
     .action((ticket: string | undefined, options: StepOptions) => runStep(step, ticket, options));
 }
+
+program
+  .command('term')
+  .description("Open a shell in the ticket's worktree, in the ticket's window")
+  .argument('[ticket]', 'Ticket ID (inferred from the current branch if omitted)')
+  .option('--window', "Open a new window instead of joining the ticket's")
+  .action(term);
+
+program
+  .command('jump')
+  .description("Focus a ticket's terminal, or pick one from every worktree")
+  .argument('[ticket]', 'Ticket to jump to (a picker when omitted)')
+  .option('--picker', 'Always show the picker')
+  .option('--any', 'Never show the picker: focus the most urgent session and go')
+  .option('--install-hotkey', 'Install an iTerm2 hotkey window that opens the picker')
+  .option('--key <spec>', 'Hotkey to bind, e.g. opt+space, ctrl+space (default: opt+space)')
+  .action(jump);
+
+program
+  .command('sessions')
+  .description('List live terminals, grouped by the ticket whose worktree they are in')
+  .argument('[ticket]', 'Only this ticket')
+  .option('-a, --all', 'Include ticket worktrees with nothing running in them')
+  .option('--json', 'Output machine-readable JSON')
+  .action(sessions);
 
 program
   .command('open')

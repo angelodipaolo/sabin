@@ -87,6 +87,10 @@ its own message.
 | `agents.ts` | `resolveAgent`, `agentArgv`, `buildTaskPrompt`, `WorkflowStep` - pure, so an orchestrator can compose prompts without the CLI |
 | `git.ts` | `currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree` |
 | `sabinResolver.ts` | finds the Sabin directory: link file, walking up, then the main worktree root |
+| `terminal/` | `TerminalDriver`, the iTerm2 driver, and `ps`/`lsof` process reading |
+| `agentState.ts` | `state/sessions/*.json` - what each agent is doing, written by hooks |
+| `sessions.ts` | `groupSessionsByTicket`, `chooseJob`, `windowForTicket` - terminals to tickets |
+| `itermProfile.ts` | the Dynamic Profile `jump --install-hotkey` writes |
 | `lock.ts` | mkdir lock, scoped to ID allocation and status writes |
 | `config.ts` | `readConfig` - a missing file is defaults; an unparsable one is an error |
 | `codeWorkspace.ts`, `agentPermissions.ts`, `gitExclude.ts` | the files `init`/`link` write |
@@ -101,12 +105,16 @@ painted the ticket over the output.
 
 | Command | Does |
 | --- | --- |
-| `init` / `link` | Sabin directory outside the repo, `.sabin` link, `.git/info/exclude`, `.code-workspace`, prompts deny rule |
+| `init` / `link` | Sabin directory outside the repo, `.sabin` link, `.git/info/exclude`, `.code-workspace`, prompts deny rule; `--hooks` also installs the activity hooks |
+| `agent-state <activity>` | hidden; what the activity hooks call. Never fails, never prints |
 | `task create "<title>"` | task + notes dir + scratchpad; `-n` for external IDs, `--open` to edit, `--json` |
 | `task list` | one line per active task; `--all`, `-s`, `--json` |
 | `task update <id> <status>` | the status write; prints the hook |
 | `task show` | print the file |
 | `plan` / `implement` / `review` `[ticket]` | the three step verbs - see below |
+| `sessions [ticket]` | live terminals, grouped by the ticket whose worktree they sit in; `--all`, `--json` |
+| `jump [ticket]` | focus a ticket's terminal, or pick one; `--any` for callers with no terminal to ask in (exits 3 when there is nothing to focus); `--install-hotkey` binds a global picker |
+| `term [ticket]` | a shell in the ticket's worktree, in the ticket's window |
 | `open` | the `.code-workspace`, or `--notes/--prompt/--plan/--task/--worktree/--sabin` (notes and prompt are scaffolded on the way) |
 | `context --json` | the agent's orienting call; deliberately omits the prompt file |
 | `where` | one path for shell interpolation |
@@ -134,6 +142,61 @@ Under iTerm2 a new tab is the default (`--here` opts out). Autonomy is not: `--y
 `agents.autonomous` in config.json, with `--supervised` to override. The tab re-invocation has to
 forward the step, the agent and the autonomy choice, or the child opens a tab of its own.
 
+## Terminal sessions
+
+A ticket owns its live terminals the way it owns its plan: **derived, never recorded**. A session
+belongs to SABIN-0017 because its working directory is inside SABIN-0017's worktree - so a tab you
+opened by hand and `cd`'d into counts exactly as much as one Sabin launched, and there is no
+registry to go stale when you close a tab.
+
+Three subprocesses per pass, whatever the session count:
+
+1. `osascript` - three bulk Apple Events for the window/tab/session tree with each session's `tty`.
+   Reading `variable named "path"` per session instead is 7x slower and, for Claude Code, wrong:
+   it rewrites its process title, so `jobName` reads `2.1.246`.
+2. `ps -eo tty=,pid=,pgid=,stat=,command=` - the foreground process group per tty.
+3. `lsof -a -d cwd -Fn -p <pids>` - the working directory per pid.
+
+Both go through `capture()`, which keeps stdout regardless of exit code: `lsof` exits non-zero when
+any pid in its list has already gone, and one transient `grep` must not empty the whole listing.
+
+`chooseJob()` picks the process a session is *about*: prefer a member of the group that matches a
+configured agent, else the group leader. Neither leader nor deepest-child works alone - `sabin
+implement` is a launcher that parents the agent, while Claude Code parents its own mcpbridge.
+
+**Agent activity** is the one thing the working directory cannot tell you: whether the Claude Code
+in that tab is mid-edit, waiting for permission, or finished twenty minutes ago. Hooks report it -
+`UserPromptSubmit` → busy, `Notification` → waiting, `Stop` → idle, `SessionEnd` → gone - each
+firing `sabin agent-state`, which writes one small file keyed by terminal session and **always exits
+0**: a hook that fails is a hook that interrupts the agent it exists to watch.
+
+State carries the agent's **pid**, found by walking the hook's own process tree to the nearest
+agent ancestor - a hook's parent is a transient shell, so its ppid would look dead immediately. That
+is what lets a killed agent's last "busy" be disbelieved by anyone holding the file, including the
+extension, which cannot enumerate terminals. A state with no pid falls back to a 12h expiry rather
+than being trusted for ever.
+
+Filtering on read is not enough on its own, because **a dying process writes no file** and the
+extension's watcher only hears about files. Two things close that: the launcher clears its child's
+state from its own `exit` handler, and the extension re-reads when its window regains focus
+(`onDidChangeWindowState`) - event-driven, no timer.
+
+Opt-in, via `sabin init --hooks`, and merged into `.claude/settings.local.json` rather than written
+over it. Not part of plain `init`: hooks execute a command on every turn of every agent, which is a
+heavier thing to put in someone's project than a deny rule. No activity is **not** a state - an
+agent with no hooks installed gets no badge rather than a guessed one. State whose session is no
+longer open is ignored on read and swept on the next `sabin sessions`.
+
+**One window per ticket.** `windowForTicket()` derives it from where the ticket's sessions already
+are, and only reuses a window the ticket has **to itself** - otherwise, on a machine that already
+has one window holding everything, every ticket's "own" window is that window and the flat tab bar
+survives for ever. Refusing a shared window means each ticket moves out on its next tab, so the
+layout migrates incrementally. `implement`, `review` and `term` then land beside each other and
+⌘1-⌘9 walks one ticket. Tabs are
+titled `SABIN-0017 · claude` and tagged with a `user.sabinTicket` variable - the title is
+best-effort, because a shell that writes the title on every prompt will overwrite it, but nothing
+depends on the title: attribution is always the working directory.
+
 ## VS Code extension (`packages/vscode-extension/src`)
 
 - `services/workspaceService.ts` - the only door to Sabin data; everything goes through core.
@@ -143,7 +206,14 @@ forward the step, the agent and the autonomy choice, or the child opens a tab of
   paths are resolved extension-side, never trusted from the page. HTML is escaped.
 - `services/workspaceFolders.ts` - swaps folders 1+ to the focused ticket's worktree and notes. Folder 0
   is never touched (VS Code restarts the extension host), so this needs the `.code-workspace`.
-- `watchers/fileWatcher.ts` - one debounced watcher over the whole Sabin directory.
+- `watchers/fileWatcher.ts` - one debounced watcher over the whole Sabin directory. `state/` gets a
+  longer debounce: agent activity changes several times a turn, on every agent at once.
+- **The extension never enumerates terminals.** It reads `state/sessions/*.json` through the watcher
+  it already has - no polling, no `osascript`, no timer. The cost is that it lists agents, not
+  shells; the complete list is `sabin sessions` and the picker. `sabin.openInITerm` is the one
+  command that spawns anything, and the line is a capability one: **`sabin jump` and `sabin term`,
+  never `plan`, `implement` or `review`.** SABIN-0016 refused to let the extension launch agents;
+  navigating to a terminal that already exists is a different act.
 
 Commands: `focusTask` (⌥⌘T), `openPrompt` (⌥⌘P), `openPlan` (⌥⌘L), `openTask`, `openWorktree`,
 `newTask`, `newNote`, `unpinTask`, `refreshTasks`, `openProjectWorkspace`.
