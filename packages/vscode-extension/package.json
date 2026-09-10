@@ -80,6 +80,11 @@
         "command": "sabin.openProjectWorkspace",
         "title": "Sabin: Reopen as Sabin Workspace",
         "icon": "$(window)"
+      },
+      {
+        "command": "sabin.openInITerm",
+        "title": "Sabin: Open in iTerm2",
+        "icon": "$(terminal)"
       }
     ],
     "configuration": {
@@ -89,6 +94,11 @@
           "type": "boolean",
           "default": true,
           "description": "Reveal the Sabin sidebar when a Sabin project opens, so `sabin open` lands on it."
+        },
+        "sabin.cliPath": {
+          "type": "string",
+          "default": "sabin",
+          "description": "Path to the sabin CLI, used for Open in iTerm2. Only `jump` and `term` are ever run."
         }
       }
     },
@@ -177,6 +187,21 @@
           "command": "sabin.openWorktree",
           "when": "view == sabin.workspaceView && viewItem == sabinFocused",
           "group": "inline@3"
+        },
+        {
+          "command": "sabin.openInITerm",
+          "when": "view == sabin.workspaceView && viewItem == sabinFocused",
+          "group": "inline@0"
+        },
+        {
+          "command": "sabin.openInITerm",
+          "when": "view == sabin.workspaceView && viewItem == sabinTask",
+          "group": "inline@0"
+        },
+        {
+          "command": "sabin.openInITerm",
+          "when": "view == sabin.workspaceView && viewItem == sabinSession",
+          "group": "inline@0"
         }
       ]
     },

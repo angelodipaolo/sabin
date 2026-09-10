@@ -18,6 +18,8 @@ import {
   slugFromTitle,
   codeWorkspacePath,
   writeCodeWorkspace,
+  readAgentStates,
+  AgentState,
   SabinConfig,
   TaskStatus,
   WorkspacePaths
@@ -222,6 +224,18 @@ export class WorkspaceService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * What each agent is doing, as its hooks last reported.
+   *
+   * Read from files inside the Sabin directory the watcher already covers -
+   * no polling, no `osascript`, no subprocess. The extension cannot ask
+   * iTerm2 anything and does not need to: the terminals it cares about are
+   * the ones with an agent in them, and those write their own state.
+   */
+  public async agentStates(): Promise<AgentState[]> {
+    return [...(await readAgentStates(await this.getSabinDir())).values()];
   }
 
   public async getSabinDir(): Promise<string> {

@@ -35,7 +35,8 @@ export const window = {
   showQuickPick: jest.fn(),
   showInputBox: jest.fn(),
   showTextDocument: jest.fn(),
-  setStatusBarMessage: jest.fn()
+  setStatusBarMessage: jest.fn(),
+  onDidChangeWindowState: jest.fn(() => ({ dispose: jest.fn() }))
 };
 
 export const commands = {

@@ -12,3 +12,7 @@ export * from './codeWorkspace';
 export * from './agentPermissions';
 export * from './agents';
 export * from './gitExclude';
+export * from './terminal';
+export * from './itermProfile';
+export * from './agentState';
+export * from './sessions';

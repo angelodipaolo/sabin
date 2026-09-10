@@ -47,7 +47,7 @@ export async function getWorkspace(ticket?: string): Promise<CliWorkspace> {
   }
 }
 
-export function fail(message: string): never {
+export function fail(message: string, code = 1): never {
   console.error(chalk.red(message));
-  process.exit(1);
+  process.exit(code);
 }

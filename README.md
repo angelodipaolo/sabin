@@ -106,6 +106,11 @@ sabin implement [ticket]               put an agent on a ticket to do the work
 sabin review [ticket]                  put an agent on a ticket to review its changes
                                        all three: [--claude|--codex|-a name] [--tab|--here]
                                        [--yolo|--supervised] [--print] [--no-launch]
+sabin sessions [ticket]                live terminals, grouped by ticket [-a] [--json]
+sabin jump [ticket]                    focus a ticket's terminal, or pick one
+                                       [--any] [--picker]
+                                       [--install-hotkey [--key opt+space]]
+sabin term [ticket]                    a shell in the ticket's worktree [--window]
 sabin open [ticket]                    [--worktree|--notes|--prompt|--plan|--task|--sabin]
 sabin context --json                   the agent's orienting call
 sabin where [ticket]                   [--notes|--prompt|--plan|--worktree|--task|--sabin|--code-workspace]
@@ -152,14 +157,66 @@ what you are working on.
 
 ## iTerm2
 
-Under iTerm2 the step verbs open a new tab in the current window, so the shell
-you typed the command in stays yours; `--here` takes it over instead. The tab
-is named after the ticket, so a row of agent tabs reads as tickets. For a plain
-shell in a worktree:
+**One window per ticket.** The step verbs open a new tab so the shell you typed
+the command in stays yours - and they open it in the window that already holds
+that ticket's terminals, provided that window is the ticket's *alone*. A window
+shared with another ticket is never reused, so if everything you have is
+currently in one big window, each ticket moves out to its own the next time you
+open a tab for it, rather than needing a clean slate. So `plan`,
+`implement`, `review` and `term` on SABIN-0017 end up side by side, ⌘1-⌘9 walks
+one ticket's terminals, and the tab bar stops being a flat list of everything
+you have open. `--here` takes over the current tab; `--window` forces a new
+window.
 
 ```bash
-scd() { cd "$(sabin where --worktree "$1")"; }
+sabin term SABIN-0017      # a shell in its worktree, in its window
+sabin sessions             # everything live, grouped by ticket
+sabin jump SABIN-0017      # go to its terminal from anywhere
+sabin jump                 # or pick from every worktree
 ```
+
+Sabin works out which ticket a terminal belongs to from its working directory,
+so a tab you opened by hand and `cd`'d into a worktree is found too - there is
+nothing to register.
+
+### Knowing which agent needs you
+
+```bash
+sabin init --hooks
+```
+
+Installs four Claude Code hooks that report what the agent is doing, so
+`sabin sessions`, the picker and the VS Code sidebar can show **waiting for
+you** / **busy** / **idle** instead of just "an agent is running here". They
+are merged into `.claude/settings.local.json`, which is not committed, and
+running it twice changes nothing.
+
+It is opt-in rather than part of `sabin init` because hooks run a command on
+every turn of every agent in that project - your call, not a side effect of
+setting Sabin up. Without them nothing breaks: agents simply show no badge,
+because an agent with no hooks is unknown rather than idle.
+
+Codex has an equivalent `notify` setting, but it lives in the global
+`~/.codex/config.toml` rather than in the project, so Sabin does not write it
+for you. The command it would run is `sabin agent-state waiting`.
+
+### A global picker
+
+```bash
+sabin jump --install-hotkey            # or --key ctrl+space, cmd+shift+j...
+```
+
+This writes an iTerm2 Dynamic Profile for a dedicated hotkey window that runs
+the picker: press the key anywhere on the machine, type to filter, Enter to
+jump, and the window hides itself the moment it hands focus over. iTerm2 loads
+the profile immediately; delete
+`~/Library/Application Support/iTerm2/DynamicProfiles/sabin.json` to remove it.
+
+Tabs are titled `SABIN-0017 · claude`, which also makes iTerm2's own Open
+Quickly (⇧⌘O) find them. A shell that rewrites the title on every prompt will
+overwrite that - the tab is also tagged with a `user.sabinTicket` variable,
+which nothing else writes to, and which you can put in a profile's title format
+as `\(user.sabinTicket)`.
 
 ## Configuration
 

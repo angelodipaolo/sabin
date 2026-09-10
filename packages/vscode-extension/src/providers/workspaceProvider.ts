@@ -1,8 +1,18 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { AgentState, AgentActivity } from '@sabin/core';
 import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
 
-type NodeKind = 'focused' | 'prompt' | 'note' | 'notesDir' | 'notesEmpty' | 'group' | 'task' | 'empty';
+type NodeKind =
+  | 'focused' | 'prompt' | 'note' | 'notesDir' | 'notesEmpty'
+  | 'group' | 'task' | 'empty' | 'session';
+
+/** Icon and wording per activity. Absent activity gets no row at all. */
+const ACTIVITY: Record<AgentActivity, { icon: string; label: string }> = {
+  waiting: { icon: 'bell-dot', label: 'waiting for you' },
+  busy: { icon: 'loading~spin', label: 'busy' },
+  idle: { icon: 'circle-outline', label: 'idle' }
+};
 
 export class WorkspaceNode extends vscode.TreeItem {
   constructor(
@@ -17,6 +27,9 @@ export class WorkspaceNode extends vscode.TreeItem {
 }
 
 const STATUS_ORDER = ['in_progress', 'review', 'ready', 'open', 'completed'];
+
+/** Whatever needs you first */
+const ORDER: Record<AgentActivity, number> = { waiting: 0, busy: 1, idle: 2 };
 
 const STATUS_LABELS: Record<string, string> = {
   in_progress: 'In progress',
@@ -38,6 +51,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
   readonly onDidChangeTreeData = this.changed.event;
 
   private workspaces: TaskWorkspace[] = [];
+  private states: AgentState[] = [];
   private focusedTicket: string | null = null;
   private pinned = false;
 
@@ -97,6 +111,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
   private async rootNodes(): Promise<WorkspaceNode[]> {
     try {
       this.workspaces = await this.service.listWorkspaces();
+      this.states = await this.service.agentStates();
     } catch (error) {
       return [new WorkspaceNode(`Could not read .sabin: ${error}`, 'empty', vscode.TreeItemCollapsibleState.None)];
     }
@@ -179,6 +194,8 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
     task.command = openFile(workspace.taskFile);
     nodes.push(task);
 
+    nodes.push(...this.sessionNodes(workspace));
+
     const notes = await this.service.notesFor(workspace);
     if (notes.length === 0) {
       const empty = new WorkspaceNode('No notes yet', 'notesEmpty', vscode.TreeItemCollapsibleState.None);
@@ -189,6 +206,38 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<WorkspaceN
     }
 
     return nodes;
+  }
+
+  /**
+   * The ticket's agents, and what they are doing.
+   *
+   * Agents only - a plain shell writes no state, so it does not appear here.
+   * `sabin sessions` and the ⌥Space picker are where the complete list lives;
+   * what you want from the editor is which agent needs you.
+   */
+  private sessionNodes(workspace: TaskWorkspace): WorkspaceNode[] {
+    return this.states
+      .filter(state => state.ticket === workspace.ticket)
+      .sort((a, b) => ORDER[a.activity] - ORDER[b.activity])
+      .map(state => {
+        const node = new WorkspaceNode(
+          state.agent ?? 'agent',
+          'session',
+          vscode.TreeItemCollapsibleState.None,
+          workspace
+        );
+        const badge = ACTIVITY[state.activity];
+        node.description = badge.label;
+        node.iconPath = new vscode.ThemeIcon(badge.icon);
+        node.contextValue = 'sabinSession';
+        node.tooltip = `${state.agent ?? 'agent'} · ${badge.label}`;
+        node.command = {
+          command: 'sabin.openInITerm',
+          title: 'Open in iTerm2',
+          arguments: [workspace.ticket]
+        };
+        return node;
+      });
   }
 
   private async directoryChildren(dir: string): Promise<WorkspaceNode[]> {

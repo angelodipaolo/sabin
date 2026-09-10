@@ -30,6 +30,7 @@ describe('SabinWebviewProvider', () => {
 
     service = {
       listWorkspaces: jest.fn().mockResolvedValue([workspace()]),
+      agentStates: jest.fn().mockResolvedValue([]),
       find: jest.fn().mockResolvedValue(workspace()),
       setStatus: jest.fn().mockResolvedValue(undefined),
       deleteTask: jest.fn().mockResolvedValue(undefined)
@@ -126,7 +127,9 @@ describe('SabinWebviewProvider', () => {
         status: 'open',
         hasPlan: true,
         hasWorktree: true,
-        branch: 'me/SABIN-0001-thing'
+        branch: 'me/SABIN-0001-thing',
+        activity: null,
+        agents: 0
       });
     });
   });
@@ -135,3 +138,37 @@ describe('SabinWebviewProvider', () => {
 function flush(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
+
+describe('toCard activity', () => {
+  const task = {
+    ticket: 'SABIN-0017',
+    title: 'Worktree navigation',
+    status: 'in_progress',
+    slug: null,
+    taskFile: '/s/tasks/open/SABIN-0017.md',
+    notesDir: '/s/notes/SABIN-0017',
+    promptFile: '/s/prompts/SABIN-0017.md',
+    worktreeDir: '/w/SABIN-0017',
+    branch: 'angelo/SABIN-0017',
+    planPath: null
+  } as any;
+
+  const state = (ticket: string, activity: string) =>
+    ({ sessionId: `${ticket}-${activity}`, ticket, activity, since: '2026-08-26T22:00:00.000Z' }) as any;
+
+  it('has no activity when no hook has reported', () => {
+    expect(toCard(task).activity).toBeNull();
+    expect(toCard(task, []).agents).toBe(0);
+  });
+
+  it('takes the most urgent activity among the ticket agents', () => {
+    const card = toCard(task, [state('SABIN-0017', 'idle'), state('SABIN-0017', 'waiting')]);
+
+    expect(card.activity).toBe('waiting');
+    expect(card.agents).toBe(2);
+  });
+
+  it('ignores agents belonging to other tickets', () => {
+    expect(toCard(task, [state('SABIN-0020', 'waiting')]).activity).toBeNull();
+  });
+});

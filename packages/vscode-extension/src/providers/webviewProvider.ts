@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { AgentState, AgentActivity } from '@sabin/core';
 import { TASK_STATUSES, TaskStatus, isTaskStatus } from '@sabin/core';
 import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
 
@@ -15,6 +16,7 @@ type BoardMessage =
   | { command: 'setStatus'; ticket: string; status: string }
   | { command: 'deleteTask'; ticket: string }
   | { command: 'copyPath'; ticket: string }
+  | { command: 'openInITerm'; ticket: string }
   | { command: 'copyTicket'; ticket: string };
 
 export class SabinWebviewProvider implements vscode.WebviewViewProvider {
@@ -53,9 +55,14 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
 
   public refresh(): void {
     if (!this.view) return;
-    void this.service.listWorkspaces().then(tasks => {
-      this.view?.webview.postMessage({ command: 'tasks', tasks: tasks.map(toCard) });
-    });
+    void Promise.all([this.service.listWorkspaces(), this.service.agentStates()]).then(
+      ([tasks, states]) => {
+        this.view?.webview.postMessage({
+          command: 'tasks',
+          tasks: tasks.map(workspace => toCard(workspace, states))
+        });
+      }
+    );
   }
 
   private async handle(message: BoardMessage): Promise<void> {
@@ -85,6 +92,11 @@ export class SabinWebviewProvider implements vscode.WebviewViewProvider {
         return;
       case 'copyTicket':
         await vscode.commands.executeCommand('sabin.copyTicket', message.ticket);
+        return;
+      case 'openInITerm':
+        // The ticket is the only thing taken from the page, and the command
+        // resolves everything else extension-side, as paths already are
+        await vscode.commands.executeCommand('sabin.openInITerm', message.ticket);
         return;
       case 'copyPath': {
         const workspace = await this.service.find(message.ticket);
@@ -138,16 +150,28 @@ export interface BoardCard {
   hasPlan: boolean;
   hasWorktree: boolean;
   branch: string | null;
+  /** The most urgent thing an agent on this ticket is doing, if any */
+  activity: AgentActivity | null;
+  agents: number;
 }
 
-export function toCard(workspace: TaskWorkspace): BoardCard {
+/** Whatever needs you first */
+const ACTIVITY_ORDER: Record<AgentActivity, number> = { waiting: 0, busy: 1, idle: 2 };
+
+export function toCard(workspace: TaskWorkspace, states: AgentState[] = []): BoardCard {
+  const mine = states
+    .filter(state => state.ticket === workspace.ticket)
+    .sort((a, b) => ACTIVITY_ORDER[a.activity] - ACTIVITY_ORDER[b.activity]);
+
   return {
     ticket: workspace.ticket,
     title: workspace.title,
     status: workspace.status,
     hasPlan: workspace.planPath !== null,
     hasWorktree: workspace.branch !== null,
-    branch: workspace.branch
+    branch: workspace.branch,
+    activity: mine[0]?.activity ?? null,
+    agents: mine.length
   };
 }
 
