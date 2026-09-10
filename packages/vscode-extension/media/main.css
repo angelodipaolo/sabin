@@ -71,16 +71,25 @@ body {
   display: none;
 }
 
+/* The whole card opens the ticket, so it looks and behaves like the button
+   it is - including under a keyboard */
 .card {
   background-color: var(--vscode-editorWidget-background);
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
   border-radius: 6px;
   padding: 10px 12px;
-  transition: border-color 150ms;
+  transition: border-color 150ms, background-color 150ms;
+  cursor: pointer;
 }
 
 .card:hover {
   border-color: var(--vscode-focusBorder);
+  background-color: var(--vscode-list-hoverBackground, var(--vscode-editorWidget-background));
+}
+
+.card:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
 }
 
 .card-header {
@@ -98,17 +107,9 @@ body {
 }
 
 .ticket {
-  background: none;
-  border: none;
-  padding: 0;
   font-family: var(--vscode-editor-font-family);
   font-size: 12px;
   color: var(--vscode-descriptionForeground);
-  cursor: pointer;
-}
-
-.ticket:hover {
-  color: var(--vscode-textLink-foreground);
 }
 
 .card-actions {
@@ -158,11 +159,6 @@ body {
   font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
-  cursor: pointer;
-}
-
-.title:hover {
-  text-decoration: underline;
 }
 
 .branch {

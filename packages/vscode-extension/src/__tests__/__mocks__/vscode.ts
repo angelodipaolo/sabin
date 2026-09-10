@@ -49,6 +49,40 @@ export const env = {
   }
 };
 
+export class EventEmitter<T> {
+  private listeners: ((value: T) => void)[] = [];
+  readonly event = (listener: (value: T) => void) => {
+    this.listeners.push(listener);
+    return { dispose: jest.fn() };
+  };
+  fire(value: T): void {
+    for (const listener of this.listeners) listener(value);
+  }
+  dispose(): void {}
+}
+
+export class TreeItem {
+  description?: string;
+  tooltip?: any;
+  iconPath?: any;
+  contextValue?: string;
+  resourceUri?: any;
+  command?: any;
+  constructor(public label: string, public collapsibleState?: number) {}
+}
+
+export class ThemeIcon {
+  static readonly File = new ThemeIcon('file');
+  static readonly Folder = new ThemeIcon('folder');
+  constructor(public id: string) {}
+}
+
+export const TreeItemCollapsibleState = {
+  None: 0,
+  Collapsed: 1,
+  Expanded: 2
+};
+
 export const FileType = {
   Unknown: 0,
   File: 1,

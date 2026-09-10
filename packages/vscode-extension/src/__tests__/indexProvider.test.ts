@@ -1,4 +1,4 @@
-import { SabinWebviewProvider, toCard } from '../providers/webviewProvider';
+import { IndexViewProvider, toCard } from '../providers/indexProvider';
 import { WorkspaceService, TaskWorkspace } from '../services/workspaceService';
 
 jest.mock('vscode');
@@ -18,12 +18,20 @@ const workspace = (overrides: Partial<TaskWorkspace> = {}): TaskWorkspace => ({
   ...overrides
 });
 
-describe('SabinWebviewProvider', () => {
-  let provider: SabinWebviewProvider;
+describe('IndexViewProvider', () => {
+  let provider: IndexViewProvider;
   let service: jest.Mocked<WorkspaceService>;
   let webview: any;
   let handler: (message: any) => Promise<void>;
+  let dispose: () => void;
   const vscode = require('vscode');
+
+  const view = () => ({
+    webview,
+    visible: true,
+    onDidChangeVisibility: jest.fn(),
+    onDidDispose: jest.fn((fn: () => void) => { dispose = fn; })
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -45,8 +53,8 @@ describe('SabinWebviewProvider', () => {
       asWebviewUri: jest.fn(uri => uri.fsPath)
     };
 
-    provider = new SabinWebviewProvider({ fsPath: '/ext', path: '/ext' } as any, service);
-    provider.resolveWebviewView({ webview, visible: true, onDidChangeVisibility: jest.fn() } as any);
+    provider = new IndexViewProvider({ fsPath: '/ext', path: '/ext' } as any, service);
+    provider.resolveWebviewView(view() as any);
     await flush();
   });
 
@@ -69,15 +77,33 @@ describe('SabinWebviewProvider', () => {
     expect(webview.postMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('routes focus, open and plan actions to the extension commands', async () => {
-    await handler({ command: 'focus', ticket: 'SABIN-0001' });
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.focusTask', 'SABIN-0001');
+  // Hiding the index behind the detail view disposes it. If the stale handle
+  // survives, the board comes back empty on the second visit.
+  it('drops the view handle when the webview is disposed', async () => {
+    dispose();
+    webview.postMessage.mockClear();
 
-    await handler({ command: 'openTask', ticket: 'SABIN-0001' });
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openTask', { ticket: 'SABIN-0001' });
+    provider.refresh();
+    await flush();
+    expect(webview.postMessage).not.toHaveBeenCalled();
+
+    provider.resolveWebviewView(view() as any);
+    await flush();
+    expect(webview.postMessage).toHaveBeenCalled();
+  });
+
+  it('routes card, plan and terminal actions to the extension commands', async () => {
+    await handler({ command: 'open', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.gotoTask', 'SABIN-0001');
 
     await handler({ command: 'openPlan', ticket: 'SABIN-0001' });
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openPlan', { ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openPlan', 'SABIN-0001');
+
+    await handler({ command: 'gotoAgent', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.gotoAgent', 'SABIN-0001');
+
+    await handler({ command: 'openTerminal', ticket: 'SABIN-0001' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.openTerminal', 'SABIN-0001');
 
     await handler({ command: 'newTask' });
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('sabin.newTask');
