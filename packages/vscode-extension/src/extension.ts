@@ -64,7 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  registerCommands(context, service, nav, detail, detailView, refresh);
+  registerCommands(context, service, nav, detail, detailView, refresh, workspaceRoot);
   context.subscriptions.push(registerDeepLink());
 
   // `sabin open` launches the editor and expects to land here, not wherever
@@ -106,9 +106,19 @@ interface RunResult {
   message: string;
 }
 
-function run(command: string, args: string[]): Promise<RunResult> {
+/**
+ * Run the CLI from inside the project.
+ *
+ * `cwd` is not optional: every Sabin command starts with `resolveSabinDir()`,
+ * which walks up from the working directory, and a spawned child inherits the
+ * extension host's - `/` on macOS. Without this the CLI dies with `.sabin not
+ * found. Run "sabin init" first.` however healthy the project is. The root
+ * passed in is the one `WorkspaceService` already resolved `.sabin` from, so
+ * if the extension is running at all, the child can find it too.
+ */
+function run(command: string, args: string[], cwd: string): Promise<RunResult> {
   return new Promise(resolve => {
-    execFile(command, args, (error, _stdout, stderr) => {
+    execFile(command, args, { cwd }, (error, _stdout, stderr) => {
       if (!error) return resolve({ ok: true, code: 0, message: '' });
       const code = typeof (error as { code?: unknown }).code === 'number'
         ? (error as unknown as { code: number }).code
@@ -132,7 +142,8 @@ function registerCommands(
   nav: Navigator,
   detail: DetailTreeProvider,
   detailView: vscode.TreeView<DetailNode>,
-  refresh: () => void
+  refresh: () => void,
+  workspaceRoot: string
 ): void {
   // Navigating still works without folder swapping, so nag once per session
   // rather than on every click
@@ -450,7 +461,7 @@ function registerCommands(
     // `--any` because a child process has no terminal to show a picker in:
     // without it, a ticket with two agents exits non-zero and we would be told
     // there is nothing to focus
-    const jumped = await run(sabin, ['jump', target, '--any']);
+    const jumped = await run(sabin, ['jump', target, '--any'], workspaceRoot);
     if (jumped.ok) return;
 
     // Exit 3 is specifically "nothing to focus" - report it rather than
@@ -476,7 +487,7 @@ function registerCommands(
     if (!target) return;
 
     const sabin = cliPath();
-    const opened = await run(sabin, ['term', target]);
+    const opened = await run(sabin, ['term', target], workspaceRoot);
     if (!opened.ok) {
       vscode.window.showErrorMessage(
         `Sabin: could not open a terminal for ${target}. ` + (opened.message || onPath(sabin))
