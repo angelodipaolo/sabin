@@ -35,6 +35,8 @@ export function AttentionList({ snapshot, filter, now, active }: Props) {
   const hasTasksAtAll = snapshot.tasks.length > 0;
   const filtered = snapshot.tasks.filter(task => matchesFilter(task, filter));
   const projectSlug = filter.kind === 'project' ? filter.slug : undefined;
+  // The ID column fits the longest ID in view, so long prefixes such as GAMEMANAGE-0001 are not cut
+  const idChars = Math.min(24, Math.max(9, ...filtered.map(task => task.id.length)));
 
   // The handler reads refs, so a key pressed before the next effect runs still sees the current list
   const keys = useRef({ ids, selected, active, open: actions.openTask });
@@ -88,7 +90,7 @@ export function AttentionList({ snapshot, filter, now, active }: Props) {
         </div>
       </header>
 
-      <div class="list-scroll" ref={listRef} data-testid="attention-list">
+      <div class="list-scroll" ref={listRef} data-testid="attention-list" style={{ '--id-chars': idChars }}>
         <Notices snapshot={snapshot} />
 
         {!hasTasksAtAll ? (
