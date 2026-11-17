@@ -14,7 +14,7 @@ import {
   setTaskStatus,
   updateTask
 } from '@sabin/core';
-import type { Bounds, Result } from '../shared/types';
+import type { Bounds, Result, TaskStatus } from '../shared/types';
 import { createTaskFile, deletableNote, listTaskFiles, readTaskFile, renameTaskFile, writeTaskFile } from './files';
 import { ReviewView, runRede } from './rede';
 import { taskFilePath } from './paths';
@@ -26,6 +26,7 @@ export interface IpcContext {
   window(): BrowserWindow | null;
   /** Re-snapshot now, after a mutation the watcher may not see (worktrees live outside the home) */
   refresh(): void;
+  taskStatusChanged(id: string, status: TaskStatus): void;
   getSnapshot(): Promise<import('../shared/types').Snapshot>;
   takeInitialTask(): string | null;
   review: ReviewView;
@@ -96,7 +97,8 @@ export function registerIpc(ctx: IpcContext): void {
   }));
   handle('task:setStatus', (id: unknown, status: unknown) => mutate(async () => {
     if (!isTaskStatus(status)) throw new Error(`Unknown status: ${String(status)}`);
-    await setTaskStatus(home, str(id, 'a task ID'), status);
+    const task = await setTaskStatus(home, str(id, 'a task ID'), status);
+    ctx.taskStatusChanged(task.id, task.status);
   }));
   handle('task:update', (id: unknown, update: { title?: unknown; project?: unknown }) => mutate(async () => {
     await updateTask(home, str(id, 'a task ID'), {

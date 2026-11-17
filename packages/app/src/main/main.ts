@@ -9,6 +9,7 @@ import { findRede, ReviewView } from './rede';
 import { Notifier } from './notify';
 import { adoptLoginShellPath } from './shellEnv';
 import { emptySnapshot, takeSnapshot } from './snapshot';
+import { SnapshotCache } from './snapshotCache';
 import { watchHome } from './watcher';
 import { DEFAULT_SIZE, loadWindowState, trackWindowState } from './windowState';
 
@@ -30,8 +31,7 @@ const home = resolveHome();
 let mainWindow: BrowserWindow | null = null;
 let pendingTask: string | null = taskFromArgv(process.argv);
 let redeAvailable = false;
-let version = 0;
-let current: Snapshot | null = null;
+const snapshots = new SnapshotCache();
 let stopWatching: (() => void) | null = null;
 
 const review = new ReviewView(() => mainWindow);
@@ -69,6 +69,12 @@ if (!app.requestSingleInstanceLock({ task: pendingTask })) {
 let running = false;
 let again = false;
 
+function publishSnapshot(next: Snapshot): void {
+  if (next.homeExists && !stopWatching) stopWatching = watchHome(home, () => void refresh());
+  notifier.update(next);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('snapshot', next);
+}
+
 async function refresh(): Promise<void> {
   if (running) {
     again = true;
@@ -78,15 +84,13 @@ async function refresh(): Promise<void> {
   try {
     do {
       again = false;
-      const next = await takeSnapshot(home, ++version, redeAvailable).catch(error => ({
+      const { version, revision } = snapshots.beginRefresh();
+      const next = await takeSnapshot(home, version, redeAvailable).catch(error => ({
         ...emptySnapshot(home, version, redeAvailable),
         homeExists: true,
         warnings: [`Could not read ${home}: ${error instanceof Error ? error.message : String(error)}`]
       }));
-      current = next;
-      if (next.homeExists && !stopWatching) stopWatching = watchHome(home, () => void refresh());
-      notifier.update(next);
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('snapshot', next);
+      if (snapshots.finishRefresh(next, revision)) publishSnapshot(next);
     } while (again);
   } finally {
     running = false;
@@ -94,8 +98,8 @@ async function refresh(): Promise<void> {
 }
 
 async function getSnapshot(): Promise<Snapshot> {
-  if (!current) await refresh();
-  return current!;
+  if (!snapshots.current) await refresh();
+  return snapshots.current!;
 }
 
 // ---- Window ---------------------------------------------------------------
@@ -227,6 +231,10 @@ async function start(): Promise<void> {
     home,
     window: () => mainWindow,
     refresh: () => void refresh(),
+    taskStatusChanged: (id, status) => {
+      const next = snapshots.setTaskStatus(id, status);
+      if (next) publishSnapshot(next);
+    },
     getSnapshot,
     takeInitialTask: () => {
       const taskId = pendingTask;

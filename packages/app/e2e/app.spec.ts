@@ -155,10 +155,12 @@ test('keeps a dirty buffer and offers reload when the file changes underneath', 
 
 test('changes status and writes the frontmatter', async () => {
   await page.locator('select[name="status"]').selectOption('review');
+  await expect(page.locator('select[name="status"]')).toHaveValue('review');
   await expect.poll(async () => parseFrontmatter(await taskFile('SABIN-0001')).data.status).toBe('review');
   // Entering review is one of the two things that notify
   await expect.poll(async () => (await hooks()).notifications.map(notice => notice.taskId)).toContain('SABIN-0001');
   await page.locator('select[name="status"]').selectOption('in_progress');
+  await expect(page.locator('select[name="status"]')).toHaveValue('in_progress');
   await expect.poll(async () => parseFrontmatter(await taskFile('SABIN-0001')).data.status).toBe('in_progress');
 });
 
@@ -244,6 +246,15 @@ test('changes status directly from the list without opening the task', async () 
   await expect.poll(async () => parseFrontmatter(await taskFile('SABIN-0005')).data.status).toBe('ready');
   await expect(page.locator('.task-view')).toHaveCount(0);
   await expect(page.locator('[data-group="ready"] [data-task-id="SABIN-0005"]')).toBeVisible();
+  await row.getByRole('combobox', { name: 'Status for SABIN-0005' }).selectOption('in_progress');
+  await expect(row.getByRole('combobox')).toHaveValue('in_progress');
+  await row.getByRole('combobox').selectOption('completed');
+  await expect(row).toHaveCount(0);
+  await expect.poll(async () => parseFrontmatter(await taskFile('SABIN-0005')).data.status).toBe('completed');
+  const completed = page.locator('[data-group="completed"]');
+  await completed.locator('.group-head').click();
+  await expect(completed.locator('[data-task-id="SABIN-0005"] select')).toHaveValue('completed');
+  await completed.locator('.group-head').click();
 });
 
 test('browses notes, keeps multiple tabs, closes and reopens notes, and cycles tabs', async () => {
