@@ -1,7 +1,7 @@
 {
   "name": "@sabin/cli",
   "version": "0.1.0",
-  "description": "CLI for Sabin workflow management system",
+  "description": "The sabin command: tasks, worktrees and agent activity across every repo",
   "bin": {
     "sabin": "./dist/index.js"
   },
@@ -13,12 +13,9 @@
     "dev": "ts-node src/index.ts"
   },
   "dependencies": {
-    "@inquirer/prompts": "^7.8.6",
     "@sabin/core": "^0.1.0",
     "chalk": "^4.1.2",
-    "commander": "^11.0.0",
-    "gray-matter": "^4.0.3",
-    "ora": "^5.4.1"
+    "commander": "^11.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

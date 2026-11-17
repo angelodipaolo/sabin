@@ -1,86 +1,79 @@
-import fs from 'fs/promises';
+import path from 'path';
 import chalk from 'chalk';
-import { parseTask, pathExists, findPlan, findFeedback, ticketFromBranch } from '@sabin/core';
-import { getWorkspace } from '../workspace-context';
+import {
+  findLog,
+  findPlan,
+  getTask,
+  listNotes,
+  listTasks,
+  resolveHome,
+  workspacesForTask
+} from '@sabin/core';
+import { loadHome, field, printJson, resolveTaskId, containingWorkspace, colorStatus } from '../cli';
 
-interface ContextOptions {
+export interface ContextOptions {
   json?: boolean;
-  ticket?: string;
 }
 
+/** The keys `context --json` returns, in order. prompt.md is deliberately absent. */
+export const CONTEXT_KEYS = [
+  'id', 'title', 'status', 'project', 'home', 'taskDir', 'taskFile', 'plan', 'log', 'notes', 'workspaces', 'workspace'
+] as const;
+
 /**
- * Report everything about the current workspace.
- *
- * This is the agent's orienting call, so the JSON stays small and flat - a
- * verbose dump gets skimmed and the paths get ignored. It also omits the
- * prompt scratchpad: handing an agent the path to the file it is told to
- * ignore undercuts the whole arrangement. The human-readable form still shows
- * it, since that is for you.
+ * The agent's orienting call: the task, its files and its workspaces. The
+ * task is the one given, else the one whose worktree holds the cwd. Never
+ * includes prompt.md - that is the human's scratchpad.
  */
-export async function showContext(options: ContextOptions): Promise<void> {
-  const { workspace, config } = await getWorkspace(options.ticket);
+export async function context(id: string | undefined, options: ContextOptions = {}): Promise<void> {
+  const { home, config } = await loadHome();
+  const tasks = await listTasks(home);
+  const taskId = await resolveTaskId(config, tasks, id, 'sabin context <id>');
+  const task = await getTask(home, taskId);
 
-  const task = workspace.taskFile ? await parseTask(workspace.taskFile) : null;
+  const [plan, log, notes, workspaces] = await Promise.all([
+    findPlan(task.dir),
+    findLog(task.dir),
+    listNotes(task.dir),
+    workspacesForTask(config, task.id)
+  ]);
+  const here = await containingWorkspace(workspaces, process.cwd());
+  const brief = (w: { repo: string; path: string; branch: string }) => ({ repo: w.repo, path: w.path, branch: w.branch });
 
-  // The checked-out branch only counts when it is this ticket's - with an
-  // explicit ticket, the current branch may belong to something else
-  const onTicketBranch = workspace.branch !== null && ticketFromBranch(workspace.branch, config) === workspace.ticket;
-  const branch = task?.branch ?? (onTicketBranch ? workspace.branch : null);
-  const notes = await listNotes(workspace.notesDir);
-  const worktreeExists = await pathExists(workspace.worktreeDir);
-  const plan = await findPlan(workspace.notesDir);
-  const feedback = await findFeedback(workspace.notesDir);
+  const result = {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    project: task.project ?? null,
+    home: resolveHome(),
+    taskDir: task.dir,
+    taskFile: task.file,
+    plan,
+    log,
+    notes,
+    workspaces: workspaces.map(brief),
+    workspace: here ? brief(here) : null
+  };
 
   if (options.json) {
-    console.log(JSON.stringify({
-      ticket: workspace.ticket,
-      name: workspace.name,
-      slug: workspace.slug,
-      title: task?.title ?? null,
-      status: task?.status ?? null,
-      branch,
-      worktree: worktreeExists ? workspace.worktreeDir : null,
-      sabinDir: workspace.sabinDir,
-      notesDir: workspace.notesDir,
-      taskFile: workspace.taskFile,
-      plan,
-      feedback,
-      notes
-    }, null, 2));
+    printJson(result);
     return;
   }
 
-  console.log(`\n${chalk.bold(workspace.name)}${task ? ` ${chalk.gray('·')} ${task.title}` : ''}`);
-  if (task) console.log(`  ${chalk.gray('Status:')}   ${task.status}`);
-  console.log(`  ${chalk.gray('Branch:')}   ${branch ?? chalk.yellow('(none yet)')}`);
-  console.log(`  ${chalk.gray('Worktree:')} ${worktreeExists ? workspace.worktreeDir : chalk.yellow('(not created)')}`);
-  console.log(`  ${chalk.gray('Task:')}     ${workspace.taskFile ?? chalk.yellow('(no task file)')}`);
-  console.log(`  ${chalk.gray('Notes:')}    ${chalk.cyan(workspace.notesDir)}`);
-  console.log(`  ${chalk.gray('Plan:')}     ${plan ?? chalk.yellow('(none)')}`);
-  console.log(`  ${chalk.gray('Feedback:')} ${feedback ?? chalk.yellow('(none)')}`);
-  console.log(`  ${chalk.gray('Prompt:')}   ${workspace.promptFile}`);
-
-  if (notes.length > 0) {
-    console.log(`\n  ${chalk.gray('Notes files:')}`);
-    for (const note of notes) console.log(`    ${note}`);
+  console.log(`${chalk.bold(task.id)}  ${task.title}`);
+  console.log(field('Status', colorStatus(task.status)));
+  if (task.project) console.log(field('Project', task.project));
+  console.log(field('Task dir', task.dir));
+  console.log(field('Plan', plan ? path.basename(plan) : chalk.gray('none')));
+  console.log(field('Log', log ? path.basename(log) : chalk.gray('none')));
+  console.log(field('Notes', notes.length ? notes.map(note => path.basename(note)).join(', ') : chalk.gray('none')));
+  if (workspaces.length === 0) {
+    console.log(field('Worktrees', chalk.gray(`none. Create one with: sabin work ${task.id}`)));
+    return;
   }
-  console.log();
-}
-
-/**
- * Notes are any context the agent might read - JSON, YAML, CSV, logs - so
- * nothing is filtered by extension. Directories carry a trailing slash.
- */
-async function listNotes(notesDir: string): Promise<string[]> {
-  try {
-    const entries = await fs.readdir(notesDir, { withFileTypes: true });
-    return entries
-      .filter(entry => !entry.name.startsWith('.'))
-      .map(entry => entry.isDirectory() ? `${entry.name}/` : entry.name)
-      .sort();
-  } catch {
-    return [];
+  console.log(field('Worktrees', '').trimEnd());
+  for (const workspace of workspaces) {
+    const mark = here && here.path === workspace.path ? chalk.green(' (here)') : '';
+    console.log(`    ${chalk.cyan(workspace.repo)}  ${workspace.branch}  ${workspace.path}${mark}`);
   }
 }
-
-

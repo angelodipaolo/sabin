@@ -1,20 +1,29 @@
-# Review a task's changes
+# Review a task, and address the findings
 
-Review the work on a ticket that is in `review`, before it is committed. This
-is meant to be a fresh session - `sabin review <TICKET>` opens one in the
-ticket's worktree - so the reviewer is reading the work rather than grading its
-own.
+Two halves of one loop. A **review pass** reads the work and records findings.
+**Addressing** works through them. Ideally a fresh session reviews, so the
+reviewer reads the work instead of grading its own.
 
-The work is **uncommitted**. A dirty worktree is the normal state for a ticket
-in `review`; nothing is committed until `/sabin complete`.
+The work is **uncommitted** while a task is in `review`. A dirty worktree is
+normal.
 
-## Steps
+## Where findings go
 
-1. **Orient.** `sabin context --json`, then `sabin task show`, the plan in
-   `notesDir` if there is one, and **any rounds already in `feedback.md`**. The
-   plan's acceptance criteria are the bar; the existing rounds are what not to
-   re-file.
-2. **Read the uncommitted work first:**
+- **`margin` on PATH** (`command -v margin`): findings are Margin threads.
+  Run `margin guide` once and follow it. Record each finding with
+  `margin comment <path>[:<line>[-<end>]] -m "<finding>"`. Margin shows the
+  threads beside the diff; the user answers there.
+- **Otherwise**: `review.md` in `taskDir`, in the format below.
+
+Use one or the other for a task, not both. If `review.md` already exists, keep
+using it.
+
+## Review pass
+
+1. **Orient.** `sabin context --json`. Read `taskFile`, the plan (its success
+   criteria are the bar), the end of `log.md`, and every existing finding
+   (`review.md`, or `margin threads --all`). Do not file a finding twice.
+2. **Read the uncommitted work**, in each workspace of the task:
 
    ```bash
    git status --porcelain
@@ -22,21 +31,71 @@ in `review`; nothing is committed until `/sabin complete`.
    git diff --cached
    ```
 
-   Read untracked files in full - they will not show in a diff. Then read any
-   commits already on the branch against its base, for the rest of the picture.
-3. **Look for**, in this order: behaviour that does not meet the acceptance
-   criteria; correctness bugs with a concrete failing input; missing tests
-   for the behaviour that changed; and only then simplifications worth making.
-4. **Write the findings** as a new round in `notesDir/feedback.md`, following
-   `references/feedback.md` - that file is the format, and this one does not
-   restate it. Never tick a box and never edit an item from an earlier round;
-   a finding that an earlier item is still broken is a new item pointing at the
-   old one. A pass that finds nothing still writes its round, with
-   `No findings.`
-5. Report the findings to the user, and point at the next step:
+   Read untracked files in full; they do not show in a diff. Then read any
+   commits on the branch against its base.
+3. **Look for**, in this order: behaviour that misses the acceptance criteria;
+   correctness bugs with a concrete failing input; missing tests for changed
+   behaviour; only then simplifications.
+4. **Record the findings.** A clean pass still records itself (`No findings.`),
+   so "reviewed, nothing wrong" differs from "never reviewed".
+5. Report them, and point at the next step. Do not fix anything, do not
+   commit, and do not change the status.
 
-   > Round 2 written to feedback.md - 3 open items. `/sabin address feedback`
-   > to work through them.
+## review.md format
 
-   Do not change the task's status: `review` already says what it needs to. Do
-   not fix anything yourself, and do not commit.
+````markdown
+# Review: TASK-0020
+
+## Round 1 — claude-opus · 2026-11-16
+
+- [ ] **`packages/core/src/tasks.ts:42` — status write is not atomic**
+  If the rename throws, the file is left half-written.
+  *Suggested:* write to a temp file and rename.
+
+- [x] **`packages/cli/src/index.ts:88` — `--print` documented twice**
+  *Suggested:* drop the second `.option()`.
+  *Addressed:* removed the duplicate.
+````
+
+1. One `##` heading per pass: `## Round <n> — <reviewer> · <YYYY-MM-DD>`. Get
+   the date from `date +%F`.
+2. Every finding is a `- [ ]` item. Its headline is bold: a backticked
+   `file:line` when there is one, an em-dash, a one-line claim.
+3. The body is free-form. `*Suggested:*` is required for anything actionable.
+4. **Append-only.** Never delete an item, never rewrite one, never un-tick.
+   A ticked item that is still broken gets a *new* item pointing at the old
+   one. A closing line that turns out wrong is corrected by appending
+   `*Correction:*` beneath it.
+
+## Addressing findings
+
+1. Read **every** open finding: all rounds of `review.md`, or
+   `margin threads --pending`.
+2. Work them oldest first. For each: make the change, verify it (build, tests,
+   lint, typecheck, behaviour), then close it:
+   - `review.md`: tick it and add `*Addressed:*` with what you did.
+   - Margin: `margin reply <id> -m "<what you did>" --resolve`.
+   Close only what is verified.
+3. **Disagree in writing.** Leave the item open and say why in it (or in a
+   Margin reply). Once the user decides, close it: `*Declined:*` with their
+   reason, never `*Addressed:*`. An item stays open only while it is truly
+   undecided - completion reads an open item as work nobody did.
+4. Do not commit and do not change the status. The exception: the task's pull
+   request is already open (the `completed` hook pushed it). The branch is
+   public then, so commit and push each round, and record the SHA in the
+   `*Addressed:*` line.
+5. Append a handoff entry to `log.md` (`references/handoff.md`) and report
+   what was addressed and what is still open.
+
+## Comments from a GitHub pull request
+
+Only when the user asks. Each pull is one round, sourced `gh pr #<n>`:
+
+```bash
+gh pr view --json number,url,comments,reviews                 # conversation and review bodies
+gh api repos/{owner}/{repo}/pulls/<number>/comments           # inline threads, with path and line
+```
+
+Review bodies (`reviews`) often hold the real feedback; do not skip them.
+Record each comment's id in the item body so a later pull can skip it.
+Approvals and "nice" are not findings.

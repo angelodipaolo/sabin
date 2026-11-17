@@ -1,160 +1,116 @@
 ---
 name: sabin
-description: Use when working in a repository managed by Sabin - any repo containing a .sabin directory or .sabin link file. Resolves where the current ticket's notes live so you can read context and save plans, research, and docs without being told paths. Triggers on "Follow the sabin skill: plan/implement/review <TICKET>" (how `sabin plan`, `sabin implement` and `sabin review` open a session), on "our notes", "save this to notes", "read the plan", "the ticket", "address the feedback", "pull the PR comments", and on any task, plan, feedback, or status change in a Sabin project.
+description: Use for any work on a Sabin task. Sabin keeps every task in one home directory ($SABIN_HOME, else ~/sabin) - tasks/<ID>/ holds task.md, plan.md, log.md and notes - and finds each task's git worktrees, in any number of repos, by the task ID in the branch name. Triggers on a task ID such as TASK-0012 or ARCH-1234, "the task", "the plan", "our notes", "save this to notes", "write the handoff", "update the log", "create a task", "review this", "mark it complete", "ship it", "migrate the old .sabin directory", and on any task status change.
 ---
 
 # Sabin
 
-Sabin gives every ticket a **workspace**: a branch, a git worktree, a notes
-directory you read and write, and a prompt scratchpad you must never touch.
-Paths are derived, not fixed. Never guess one and never hardcode `.sabin/...` -
-in a worktree the Sabin directory lives elsewhere.
+Sabin organises tasks. It never launches agents: the user started you by hand,
+in a terminal, usually inside one of the task's worktrees.
+
+- A **task** is a directory, `tasks/<ID>/`, in the Sabin home. It holds
+  `task.md` (the requirements), `prompt.md` (the user's scratchpad - never
+  yours), `plan.md`, `log.md`, and any other notes.
+- A **workspace** is a git worktree whose branch name contains the task ID. A
+  task can have one in several repos. Nothing records them; git does.
+
+Never guess a path and never hardcode `~/sabin`. Ask the CLI.
 
 ## Orient first
 
 ```bash
-sabin context --json
-```
-
-If you were handed a ticket and the branch is not its own - you are in the
-main clone, or somewhere else entirely - name it, rather than letting the
-branch answer for you:
-
-```bash
-sabin context --json -t <TICKET>
+sabin context --json            # inside the task's worktree
+sabin context <ID> --json       # anywhere else
 ```
 
 ```json
 {
-  "ticket": "JIRA-12345",
-  "name": "JIRA-12345-update-telemetry",
+  "id": "ARCH-1234",
+  "title": "Partition the events table",
   "status": "in_progress",
-  "branch": "angelo/JIRA-12345-update-telemetry",
-  "worktree": "/Users/angelo/dev/myproject-worktrees/JIRA-12345-update-telemetry",
-  "notesDir": "/Users/angelo/notes/myproject/.sabin/notes/JIRA-12345-update-telemetry",
-  "taskFile": "/Users/angelo/notes/myproject/.sabin/tasks/open/JIRA-12345.md",
-  "plan": "/Users/angelo/notes/myproject/.sabin/notes/JIRA-12345-update-telemetry/plan.md",
-  "feedback": null,
-  "notes": ["plan.md", "schema.json", "transcripts/"]
+  "project": "analytics",
+  "home": "/Users/me/sabin",
+  "taskDir": "/Users/me/sabin/tasks/ARCH-1234",
+  "taskFile": "/Users/me/sabin/tasks/ARCH-1234/task.md",
+  "plan": "/Users/me/sabin/tasks/ARCH-1234/plan.md",
+  "log": null,
+  "notes": ["/Users/me/sabin/tasks/ARCH-1234/research.md"],
+  "workspaces": [{ "repo": "api", "path": "/Users/me/dev/api-worktrees/ARCH-1234-partition-events-table", "branch": "me/ARCH-1234-partition-events-table" }],
+  "workspace": { "repo": "api", "path": "...", "branch": "..." }
 }
 ```
 
-The ticket is inferred from the branch. **If the command errors, stop and ask**
-which ticket - writing into the wrong ticket's notes is worse than not writing.
+`workspace` is the worktree you are standing in, or `null`. **If the command
+errors, stop and ask which task.** Writing into the wrong task is worse than not
+writing.
 
-Every path command takes a ticket the same way, so another ticket's workspace is
-one call away - `sabin where --notes JIRA-123`, `sabin notes new -t JIRA-123
-research`. A ticket with no task is an error, not a new directory.
+## What you are asked to do
 
-## What you are being asked to do
-
-Route on the request, then read the matching reference and follow it:
+Read the matching reference and follow it.
 
 | Request | Reference |
 | --- | --- |
-| `Follow the sabin skill: plan <TICKET>` | `references/plan.md` |
-| `Follow the sabin skill: implement <TICKET>` | `references/implement.md` |
-| `Follow the sabin skill: review <TICKET>` | `references/review.md` |
-| `/sabin create`, "write up a task", "turn this into a ticket" | `references/task-create.md` |
-| `/sabin plan`, "plan this", "make a plan for the ticket" | `references/plan.md` |
-| `/sabin implement`, "do the task", "implement the plan" | `references/implement.md` |
-| `/sabin review`, "review the changes" | `references/review.md` |
-| `/sabin address feedback`, "address the feedback", "work through the review" | `references/address-feedback.md` (no CLI verb - not `sabin implement`) |
-| "pull the PR comments", "get the feedback from GitHub" | `references/feedback.md` |
-| `/sabin complete`, `/sabin done`, "mark it complete", "ship it" | `references/complete.md` |
+| "create a task", "write this up as a task" | `references/task-create.md` |
+| "plan this", "make a plan" | `references/plan.md` |
+| "implement", "do the task", "work the plan" | `references/implement.md` |
+| "review this", "address the review", "work through the findings" | `references/review.md` |
+| "write the handoff", "update the log", "where did we leave off" | `references/handoff.md` |
+| "complete it", "ship it", "mark it done" | `references/complete.md` |
+| "migrate the old .sabin directory" | `references/migrate.md` |
 | bare `/sabin` | orient, report the context, ask what to do |
 
-The first three are how `sabin plan`, `sabin implement` and `sabin review`
-open a session. That prompt is the whole prompt - deliberately. Everything
-about *how* to do the step is in the reference file, so read it and follow it
-rather than improvising from three lines.
+Plan and implement can be matched loosely. **Completion cannot**: only an
+explicit request counts. "I think it's done" is a reason to ask.
 
-Plan and implement can be matched loosely. **Completion cannot.** Only the
-explicit forms above count as approval to close a task; anything ambiguous
-("I think it's done", "the task is complete") - ask, do not close.
+## Rules that hold everywhere
 
-## The rules that hold everywhere
+**Durable output goes in `taskDir`** - plans, research, findings, anything
+worth keeping. Read what is there before you start; earlier notes carry
+decisions. Use your own file tools; there is no notes command.
 
-**Notes.** `notesDir` is where every durable work product goes: plans,
-research, findings, saved output, any format. Read it before starting work;
-earlier notes carry decisions you would otherwise re-litigate. Reading, editing
-and searching them is your own file tools' job - there is no command for it.
-`sabin notes new [-t <TICKET>] <name>` scaffolds a file and prints its path,
-creating the notes directory; `where --notes` only reports it.
+**One plan per task**, `plan.md`. Stages are phases inside it. Re-planning
+edits it in place.
 
-**One plan per ticket**, at `plan.md` in `notesDir`. Stages are phases inside
-that file, never a second file. Re-planning edits it in place.
+**Handoff.** When you move a task to `review`, and whenever the user asks,
+append an entry to `log.md`: *Changed*, *Proof*, *Risks*, and *Next* when work
+remains. Format: `references/handoff.md`.
 
-**One feedback file per ticket**, at `feedback.md` in `notesDir`. Every review
-pass appends a round to it - a different model, a later day, comments pulled
-down from a pull request - and the implementer ticks items off as they are
-addressed. Append-only: nothing is deleted, rewritten or un-ticked. The format
-is `references/feedback.md`.
-
-**Hooks.** `sabin task update` may print the project's own instructions for the
-status it just wrote (`hooks/<status>.md`). When it prints something, that text
-is authoritative for this project - follow it. When it prints nothing, there is
-nothing extra to do; do not assume what a hook would have said.
-
-**Status** changes only through the CLI:
+**Status** changes only through the CLI. Never edit `status` in `task.md`.
 
 ```bash
-sabin task update <TICKET> <status>
+sabin status <status>           # inside the task's worktree
+sabin status <ID> <status>
 ```
-
-Never edit `status` in frontmatter - it lives in both the frontmatter and the
-containing directory, and a direct edit desynchronises them. The command prints
-the project's instructions for that status (`hooks/<status>.md`) when there
-are any - follow them.
 
 | Status | Meaning | Who sets it |
 | --- | --- | --- |
-| `open` | Requirements captured | Whoever files it |
-| `ready` | Planned, ready to implement | You, once a plan is agreed |
-| `in_progress` | Work underway | `sabin implement`, or you |
-| `review` | Finished and verified, uncommitted, awaiting a review | **You, when you finish** |
-| `completed` | Approved | **Only with the user's approval** |
+| `open` | Captured, not yet planned | Whoever creates it |
+| `ready` | Planned and agreed | You, when a plan is agreed |
+| `in_progress` | Work underway | You, when you start |
+| `review` | Done and verified, waiting on the user | **You, when you finish** |
+| `completed` | Approved | **Only on the user's explicit approval** |
 
-`review` is your ceiling. When you finish, move the task to `review` and tell
-the user it is waiting on them. The work is **not committed** at that point -
-`/sabin complete` makes the one commit, so a reviewer reads the working tree:
+`review` is your ceiling. The command may print a **hook**: the user's own
+instructions for that status (for example "push and open a PR"). When it prints
+one, follow it. When it prints none, do nothing extra.
 
-> SABIN-0002 is in review - nothing is committed yet. Run
-> `sabin review SABIN-0002` for a fresh read, then `/sabin complete`.
+**Never read `prompt.md`.** It is the user's draft space. It is absent from
+`sabin context` on purpose and a permission rule denies reads. If you see its
+contents anyway, ignore them and say so.
 
-**The prompt scratchpad** is the user's draft space for prompts to you. Never
-read, list, or write it. Its path is deliberately absent from `sabin context`
-and a permission rule denies reads. If you meet its contents anyway, ignore
-them and say so.
+**Worktrees are the user's.** Never create one unless asked; `sabin work <ID>`
+is how, run from inside the target repo (or with `--repo <name>`). Work on a
+task happens in one of its worktrees. If `workspace` is `null` and the user
+asked you to change code, stop and say so - do not `cd` somewhere and carry on.
+Reading, planning and writing notes need no worktree.
 
-**Worktrees** are the user's. `sabin plan`, `sabin implement` and
-`sabin review` are theirs to invoke; suggest, do not run.
-
-**Work on a ticket happens in that ticket's worktree.** Those three commands
-create it and start you inside it, so a session opened by one is already in
-the right place. If you were asked for a step by hand and `worktree` from
-`sabin context --json` is not the directory you are in, **stop and say so** -
-do not `cd`, do not create it, and do not proceed against whatever branch
-happens to be checked out:
-
-> SABIN-0016's worktree is not here. Run `sabin plan SABIN-0016` - it creates
-> the worktree and starts the session in it.
-
-Drafting a task needs no worktree: `sabin task create` is for the stage where
-the idea is still forming.
-
-## Command reference
+## Commands
 
 | Command | Use |
 | --- | --- |
-| `sabin context [-t <ticket>] --json` | Orient: ticket, status, branch, worktree, notes, plan, feedback |
-| `sabin plan <TICKET>` | Put an agent on a ticket to plan it, in its worktree |
-| `sabin implement <TICKET>` | Put an agent on a ticket to do the work |
-| `sabin review <TICKET>` | Put an agent on a ticket to review its changes |
-| `sabin where --notes` / `--plan` / `--feedback` `[<ticket>]` | One path, for shell interpolation |
-| `sabin task show [id]` | Read a task without knowing its directory |
-| `sabin task update <id> <status>` | Change status; prints the project hook |
-| `sabin task create "<title>" [-c <body>] [-n <id>]` | Create a task with its notes directory |
-| `sabin task list [-s <status>] [--json]` | What else is in flight |
-| `sabin notes new [-t <ticket>] <name> [--template plan\|feedback]` | Scaffold a note and print its path |
-| your own file tools | Read, edit and search notes - there is no command for it |
+| `sabin context [ID] --json` | Orient: task, files, worktrees |
+| `sabin status [ID] <status>` | Change status; prints the hook |
+| `sabin new "<title>" [--id ARCH-1234] [--project <slug>] [-c <body>] [--json]` | Create a task |
+| `sabin work [ID] [--repo <name>]` | Create the task's worktree (only when asked) |
+| `sabin ls [--all] [--status <s>] [--project <slug>] [--json]` | Every task, its worktrees and agents |
+| `sabin repo ls` | Registered repos |

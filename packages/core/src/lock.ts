@@ -12,23 +12,24 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_STALE_MS = 30000;
 
 /**
- * Run `fn` while holding an exclusive lock on the .sabin directory.
+ * Run `fn` while holding an exclusive lock on the Sabin home.
  *
- * Scoped deliberately narrowly: only task ID allocation and status mutations
- * race between worktrees. Notes are written to per-ticket directories and
- * need no coordination.
+ * Scoped deliberately narrowly: ID allocation, task.md writes and config.json
+ * edits are read-modify-write and race between terminals, the app and agents.
+ * Notes, plans and logs are plain files nobody else rewrites.
  *
  * Uses mkdir, which is atomic on every platform we care about, so this needs
  * no dependency.
  */
 export async function withLock<T>(
-  sabinDir: string,
+  home: string,
   fn: () => Promise<T>,
   options: LockOptions = {}
 ): Promise<T> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
-  const lockDir = path.join(sabinDir, '.lock');
+  const lockDir = path.join(home, '.lock');
+  await fs.mkdir(home, { recursive: true });
 
   const deadline = Date.now() + timeoutMs;
   let delay = 25;

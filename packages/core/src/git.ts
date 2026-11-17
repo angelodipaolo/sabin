@@ -10,6 +10,8 @@ export interface WorktreeInfo {
   branch?: string;
   detached: boolean;
   bare: boolean;
+  /** Git knows the directory is gone; `git worktree prune` would drop it */
+  prunable: boolean;
 }
 
 /**
@@ -72,7 +74,8 @@ export async function repoRoot(cwd: string): Promise<string | null> {
 }
 
 /**
- * Parse `git worktree list --porcelain` into structured records
+ * Parse `git worktree list --porcelain` into structured records. A directory
+ * that is not a repo, or no longer exists, yields an empty list.
  */
 export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
   let output: string;
@@ -88,7 +91,7 @@ export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
   for (const line of output.split('\n')) {
     if (line.startsWith('worktree ')) {
       if (current) worktrees.push(current);
-      current = { path: line.slice('worktree '.length), detached: false, bare: false };
+      current = { path: line.slice('worktree '.length), detached: false, bare: false, prunable: false };
     } else if (!current) {
       continue;
     } else if (line.startsWith('HEAD ')) {
@@ -100,6 +103,8 @@ export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
       current.detached = true;
     } else if (line === 'bare') {
       current.bare = true;
+    } else if (line === 'prunable' || line.startsWith('prunable ')) {
+      current.prunable = true;
     }
   }
   if (current) worktrees.push(current);
@@ -117,7 +122,8 @@ export async function branchExists(cwd: string, branch: string): Promise<boolean
 }
 
 /**
- * Add a worktree, creating the branch unless it already exists
+ * Add a worktree, creating the branch from the current HEAD of `cwd` unless
+ * it already exists
  */
 export async function addWorktree(cwd: string, worktreePath: string, branch: string): Promise<void> {
   const exists = await branchExists(cwd, branch);

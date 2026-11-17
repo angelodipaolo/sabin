@@ -1,282 +1,127 @@
 # Sabin
 
-A worktree command center for agentic coding. Write up a task, hand it to an
-agent in its own worktree, review what comes back - from the terminal, with VS
-Code and iTerm2 alongside.
+A command center for agentic coding. One place to see every task across every
+repo and worktree, what each agent is doing, and where each task was left off.
 
-Everything is text. A task is a markdown file; its notes are a directory; its
-plan is `plan.md` in that directory. The CLI owns the parts the filesystem
-cannot know - ID allocation, status transitions, branches and worktrees - and
-ordinary file tools own the rest.
+Sabin observes and organises. **It never launches an agent.** You start Codex
+or Claude Code yourself, in a terminal, in a task's worktree. Sabin learns what
+they do from their hooks and what they changed from git.
+
+Everything is text in one directory, `~/sabin` (or `$SABIN_HOME`). A task is a
+directory of markdown files. Its worktrees are not recorded anywhere: Sabin
+finds them by the task ID in the branch name, in every repo you registered.
 
 ## The workflow
 
 ```bash
-sabin task create "Add telemetry to uploads" --open   # task file + notes dir - no worktree yet
-sabin plan SABIN-0012                                  # an agent works the problem through with you
-sabin implement SABIN-0012                             # an agent does the work
-sabin review SABIN-0012                                # an agent reviews what came back
-sabin task list                                        # what is in flight
-sabin open                                             # board, notes and prompts in one VS Code window
+sabin new "Partition the events table" --id ARCH-1234 --project analytics
+cd ~/dev/api && sabin work ARCH-1234       # worktree + branch in this repo (registers it)
+cd ~/dev/web && sabin work ARCH-1234       # the same task can span repos
+cd ../api-worktrees/ARCH-1234-partition-events-table && codex
+sabin ls                                   # every task, its repos, and what its agents are doing
+sabin app                                  # the desktop app
 ```
 
-Drafting a task makes no worktree - it is a file you keep editing until the
-idea is whole. The three step verbs do: each creates the branch and worktree
-if they are not there and starts the agent inside them, in a new iTerm2 tab.
+```
+ID          STATUS       PROJECT    TITLE                         REPOS    AGENT
+ARCH-1234   in_progress  analytics  Partition the events table    api,web  codex waiting 6m
+TASK-0007   review       -          Fix the flaky upload test     api      claude idle 2h
+2 tasks  (completed hidden; --all to show)
+```
 
 The agent follows the **sabin skill**: it orients with `sabin context --json`,
-reads the ticket's notes, writes plans and research there, and moves the task
-to `review` when the work is done and verified - **uncommitted**, so a fresh
-reviewer reads the working tree rather than a sealed diff. `sabin review`
-starts that reviewer; it writes what it finds to one `feedback.md` in the
-ticket's notes, and `/sabin address feedback` works through it and ticks items
-off. Every later pass - a different model, another day, comments pulled down
-from a pull request with `gh` - appends a round to that same file, so the
-worklist survives the session that found it.
+reads and writes the task's files, moves the task to `review` when the work is
+done and verified, and appends a handoff to `log.md` - what changed, the proof
+it works, the risks, and what is next. The work stays **uncommitted** in
+`review`, so a fresh reviewer reads the working tree. Findings go to
+[Margin](#review) threads when `margin` is installed, otherwise to `review.md`.
 
-You say `/sabin complete`. That is where the one commit happens, and where the
-task moves to `completed` and your project's completion hook runs - "push and
-open a PR", say. Worktrees are never removed for you.
-
-Optional steps in between, all via the skill: `/sabin create` to expand a
-rough idea into a task, `/sabin plan` to write a plan.
-
-### Statuses
-
-| Status | Meaning |
-| --- | --- |
-| `open` | Requirements captured |
-| `ready` | Planned, ready to implement |
-| `in_progress` | An agent (or you) is on it |
-| `review` | Finished and verified, uncommitted, waiting on a review |
-| `completed` | Approved; file moves to `tasks/completed/` |
+You approve completion. That is where the commit happens, the task moves to
+`completed`, and your hook for that status runs - "push and open a PR", say.
+Worktrees are never removed for you.
 
 ## Layout
 
-Sabin data lives **outside the repo** so every worktree sees the same board:
-
 ```
-~/notes/myproject/.sabin/
+~/sabin/
   config.json
-  tasks/open/SABIN-0012.md          # the task; filename is the stable ID
-  tasks/completed/
-  notes/SABIN-0012-add-telemetry/   # agent-readable context, plan.md lives here
-  prompts/SABIN-0012-add-telemetry.md   # your prompt scratchpad; agents are denied
-  hooks/completed.md                # instructions printed on `task update ... completed`
-  research/
+  projects/<slug>.md          optional grouping: title, status, prose
+  tasks/<ID>/
+    task.md                   status, title, project, created; the requirements
+    prompt.md                 your scratchpad - agents are denied it
+    plan.md                   one plan per task
+    log.md                    session handoffs, appended
+    *.md                      notes
+  hooks/<status>.md           printed by `sabin status` after that transition
+  hooks/<repo>/<status>.md    per-repo override
+  state/sessions/             agent activity, written by hooks
 ```
 
-The repo gets a `.sabin` link file pointing there, ignored via
-`.git/info/exclude`. One suffix, derived from the title, names the branch,
-worktree, notes directory and scratchpad alike:
-
-```
-SABIN-0012 "Add telemetry to uploads"
-  branch     angelo/SABIN-0012-add-telemetry-uploads
-  worktree   ../myproject-worktrees/SABIN-0012-add-telemetry-uploads
-  notes      notes/SABIN-0012-add-telemetry-uploads/
-```
-
-## Install
-
-```bash
-git clone https://github.com/angelodipaolo/sabin.git && cd sabin
-npm install && npm run build
-(cd packages/cli && npm link)          # puts `sabin` on your PATH
-sabin skill install                    # ~/.claude/skills/sabin (or --agent codex)
-```
-
-VS Code extension:
-
-```bash
-cd packages/vscode-extension && npx @vscode/vsce package
-code --install-extension sabin-vscode-0.1.0.vsix
-```
-
-Set up a project from inside its repo:
-
-```bash
-sabin init                             # asks where the Sabin directory goes and the ID prefix
-sabin init --shared ~/notes/myproject/.sabin -p MYPROJECT -b angelo   # or say it all at once
-```
-
-## CLI
-
-```
-sabin init | link <path>               set up a repo
-sabin task create "<title>"            [-c body] [-n JIRA-123] [--open] [--json]
-sabin task list                        [-s status] [--all] [--json]
-sabin task show [id]
-sabin task update <id> <status>        prints hooks/<status>.md afterwards
-sabin plan [ticket]                    put an agent on a ticket to plan it, with you
-sabin implement [ticket]               put an agent on a ticket to do the work
-sabin review [ticket]                  put an agent on a ticket to review its changes
-                                       all three: [--claude|--codex|-a name] [--tab|--here]
-                                       [--yolo|--supervised] [--print] [--no-launch]
-sabin sessions [ticket]                live terminals, grouped by ticket [-a] [--json]
-sabin jump [ticket]                    focus a ticket's terminal, or pick one
-                                       [--any] [--picker]
-                                       [--install-hotkey [--key opt+space]]
-sabin term [ticket]                    a shell in the ticket's worktree [--window]
-sabin open [ticket]                    [--worktree|--notes|--prompt|--plan|--task|--sabin]
-sabin context --json                   [-t ticket] the agent's orienting call
-sabin where [ticket]                   [--notes|--prompt|--plan|--worktree|--task|--sabin|--code-workspace]
-sabin notes new <name>                 [-t ticket] [--template plan]
-sabin skill install                    [--agent claude|codex]
-```
-
-Tickets are inferred from the current branch when omitted. A branch with no
-ticket is an error, never a guess - and so is a bare number: a ticket is named
-in full or not at all. A ticket you *name* has to have a task: resolving one
-that does not exist would hand back a plausible path to a directory nothing
-else will ever look in.
-
-`plan`, `implement` and `review` are one command with three prompts. Each
-builds the workspace if it is missing and launches the agent in it;
-`--no-launch` stops after the workspace. Only `implement` marks the task
-`in_progress` - planning happens before a task is `ready`, and reviewing
-happens when it is already in `review`.
-
-### Letting agents work unattended
-
-Agents launch supervised: they ask before acting. `--yolo` drops that for one
-run, and
-
-```json
-{ "agents": { "autonomous": true } }
-```
-
-makes it the default, with `--supervised` to override. It is off by default on
-purpose - the worktree isolates your other work, not your machine.
-
-## VS Code
-
-The Sabin activity bar has two views. **Workspace** shows the focused task -
-its scratchpad, task file and notes - above every open task grouped by status.
-Focus follows the checked-out branch until you click a task, which pins it.
-**Board** is the same tasks as cards with a status menu.
-
-- `⌥⌘T` focus a task (searchable by ID or title)
-- `⌥⌘P` open the focused task's prompt scratchpad
-- `⌥⌘L` open its plan
-
-Opened via `sabin open` (the generated `.code-workspace`), focusing a task also
-swaps the Explorer to that ticket's worktree and notes, so `Cmd+P` is scoped to
-what you are working on.
-
-## iTerm2
-
-**One window per ticket.** The step verbs open a new tab so the shell you typed
-the command in stays yours - and they open it in the window that already holds
-that ticket's terminals, provided that window is the ticket's *alone*. A window
-shared with another ticket is never reused, so if everything you have is
-currently in one big window, each ticket moves out to its own the next time you
-open a tab for it, rather than needing a clean slate. So `plan`,
-`implement`, `review` and `term` on SABIN-0017 end up side by side, ⌘1-⌘9 walks
-one ticket's terminals, and the tab bar stops being a flat list of everything
-you have open. `--here` takes over the current tab; `--window` forces a new
-window.
-
-```bash
-sabin term SABIN-0017      # a shell in its worktree, in its window
-sabin sessions             # everything live, grouped by ticket
-sabin jump SABIN-0017      # go to its terminal from anywhere
-sabin jump                 # or pick from every worktree
-```
-
-Sabin works out which ticket a terminal belongs to from its working directory,
-so a tab you opened by hand and `cd`'d into a worktree is found too - there is
-nothing to register.
-
-### Knowing which agent needs you
-
-```bash
-sabin init --hooks
-```
-
-Installs four Claude Code hooks that report what the agent is doing, so
-`sabin sessions`, the picker and the VS Code sidebar can show **waiting for
-you** / **busy** / **idle** instead of just "an agent is running here". They
-are merged into `.claude/settings.local.json`, which is not committed, and
-running it twice changes nothing.
-
-It is opt-in rather than part of `sabin init` because hooks run a command on
-every turn of every agent in that project - your call, not a side effect of
-setting Sabin up. Without them nothing breaks: agents simply show no badge,
-because an agent with no hooks is unknown rather than idle.
-
-Codex has an equivalent `notify` setting, but it lives in the global
-`~/.codex/config.toml` rather than in the project, so Sabin does not write it
-for you. The command it would run is `sabin agent-state waiting`.
-
-### A global picker
-
-```bash
-sabin jump --install-hotkey            # or --key ctrl+space, cmd+shift+j...
-```
-
-This writes an iTerm2 Dynamic Profile for a dedicated hotkey window that runs
-the picker: press the key anywhere on the machine, type to filter, Enter to
-jump, and the window hides itself the moment it hands focus over. iTerm2 loads
-the profile immediately; delete
-`~/Library/Application Support/iTerm2/DynamicProfiles/sabin.json` to remove it.
-
-Tabs are titled `SABIN-0017 · claude`, which also makes iTerm2's own Open
-Quickly (⇧⌘O) find them. A shell that rewrites the title on every prompt will
-overwrite that - the tab is also tagged with a `user.sabinTicket` variable,
-which nothing else writes to, and which you can put in a profile's title format
-as `\(user.sabinTicket)`.
-
-## Configuration
-
-`config.json` in the Sabin directory. Everything after `taskNumberPadding` is optional.
+`config.json`:
 
 ```json
 {
-  "projectPrefix": "MYPROJECT",
-  "taskNumberPadding": 4,
-  "branch":    { "prefix": "angelo", "template": "{prefix}/{ticket}-{slug}" },
-  "worktrees": { "root": "../myproject-worktrees", "postCreate": ["npm ci"] },
-  "slug":      { "from": "title", "maxLength": 32, "stopWords": true },
-  "agents":    { "default": "claude", "definitions": {} },
-  "editor":    "code"
-}
-```
-
-`claude` and `codex` launch out of the box. Anything else is a definition;
-arguments may use `{prompt}`, `{ticket}`, `{notesDir}`, `{worktree}` and
-`{taskFile}`, and `{prompt}` is appended when a definition never mentions it:
-
-```json
-"agents": {
-  "default": "codex",
-  "definitions": {
-    "codex": { "command": "codex", "args": ["--full-auto", "{prompt}"] },
-    "aider": { "command": "aider", "args": ["--message", "{prompt}"] }
+  "idPrefix": "TASK",
+  "idPadding": 4,
+  "branch": { "prefix": "me", "template": "{prefix}/{id}-{slug}" },
+  "repos": {
+    "api": { "path": "/Users/me/dev/api", "worktreesRoot": "../api-worktrees", "postCreate": ["npm install"] }
   }
 }
 ```
 
-### Hooks
+A missing file means defaults. Repos are added by `sabin work` (the repo you
+run it in) or `sabin repo add`; `worktreesRoot` defaults to
+`../<repo>-worktrees` and `postCreate` runs in each new worktree.
 
-`hooks/<status>.md` holds project instructions for an agent moving a task to
-that status. `sabin task update` prints the file after the change lands, so
-it reaches the agent from the command it had to run anyway.
+## Commands
 
+| Command | Does |
+| --- | --- |
+| `sabin setup [--hooks]` | Create the home, install the skill for Claude Code and Codex, deny agents `prompt.md`. `--hooks` adds the activity hooks. Safe to re-run. |
+| `sabin new "<title>" [--id ARCH-1234] [-p <project>] [-c <body>] [--json]` | Create a task. Never a worktree. |
+| `sabin work [id] [-r <repo>] [--json]` | Create the task's worktree in this repo (or `--repo`). Idempotent. |
+| `sabin ls [-p <project>] [-s <status>] [-a] [--json]` | Tasks across all repos, with worktrees and agent activity. |
+| `sabin status [id] <status>` | `open`, `ready`, `in_progress`, `review`, `completed`. Prints the hook. The ID is inferred inside a worktree. |
+| `sabin context [id] [--json]` | What an agent needs to orient. Never includes `prompt.md`. |
+| `sabin repo add [path]` / `ls` / `rm <name>` | The repo registry. |
+| `sabin app [-t <id>]` | Open the desktop app. |
+
+## Install
+
+```bash
+npm install && npm run build
+cd packages/cli && npm link                # puts `sabin` on PATH
+sabin setup --hooks
 ```
-# hooks/completed.md
-Push the branch and open a pull request with `gh pr create --fill`.
+
+`setup` writes to `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`),
+`~/.claude/skills/sabin`, `~/.agents/skills/sabin` and, with `--hooks`,
+`~/.codex/hooks.json` (or `$CODEX_HOME`). It merges into existing settings and
+prints every file it touched. **Codex runs new hooks only after you trust them**:
+open `/hooks` in Codex once and approve the `sabin agent-state` entries.
+
+Without hooks, everything works except agent activity in `ls` and the app.
+
+## Review
+
+When Margin (`margin`, a local diff review tool) is on PATH, a review pass records
+its findings as Margin threads, and the app shows Margin's review UI for a
+worktree. Without it, findings go to `review.md` in the task directory as
+checkbox rounds. Either way, completion waits until every finding is
+addressed or declined.
+
+## Moving from the old `.sabin` directories
+
+Earlier versions kept a `.sabin` directory per repo. There is no automatic
+upgrade: ask an agent to "migrate the old .sabin directory at <path>". It
+follows `skills/sabin/references/migrate.md`, shows a dry run first, copies
+rather than moves, and keeps existing worktrees and branches.
+
+## Development
+
+```bash
+npm run build && npm test && npm run lint && npm run typecheck
 ```
 
-## Claude Code plugin
-
-The repo is also a Claude Code plugin that ships the skill:
-
-```
-/plugin marketplace add /path/to/sabin
-/plugin install sabin@sabin-local
-```
-
-## License
-
-MIT
+See `CLAUDE.md` for the design and the reasons behind it.

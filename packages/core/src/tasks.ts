@@ -1,231 +1,244 @@
 import fs from 'fs/promises';
-import path from 'path';
-import { SabinConfig, Task, TaskStatus } from './types';
-import { parseTask, writeTask } from './markdown';
+import { SabinConfig, Task, TaskStatus, isTaskStatus } from './types';
+import { homePaths } from './home';
 import { withLock } from './lock';
-import { TaskExistsError, TaskNotFoundError } from './errors';
+import { writeFileAtomic, pathExists } from './fs';
+import { parseFrontmatter, stringifyFrontmatter, asIsoDate } from './markdown';
+import { parseTaskId, compareTaskIds, splitTaskId } from './ids';
+import { parseProjectSlug } from './slug';
+import { taskDirPath, taskFilePath, promptFilePath, promptTemplate } from './taskFiles';
+import {
+  SabinError,
+  InvalidTaskIdError,
+  InvalidTaskStatusError,
+  InvalidProjectError,
+  TaskExistsError,
+  TaskNotFoundError
+} from './errors';
 
 /**
- * Tasks live in tasks/<dir>/<ID>.md. The directory is the second copy of the
- * status, which is why every status write goes through here: the frontmatter
- * and the location have to change together.
+ * Read one task directory. Throws when task.md is missing or unreadable;
+ * `listTasks` is the tolerant caller.
  */
-export function tasksDir(sabinDir: string): string {
-  return path.join(sabinDir, 'tasks');
-}
+async function readTask(home: string, id: string): Promise<Task> {
+  const dir = taskDirPath(home, id);
+  const file = taskFilePath(dir);
+  const { data, content } = parseFrontmatter(await fs.readFile(file, 'utf8'));
 
-export function statusDirName(status: TaskStatus): 'open' | 'completed' {
-  return status === 'completed' ? 'completed' : 'open';
-}
+  const canonical = parseTaskId(id)!;
+  const task: Task = {
+    id: canonical,
+    // An unknown status reads as open rather than hiding the task
+    status: isTaskStatus(data.status) ? data.status : 'open',
+    title: typeof data.title === 'string' && data.title.trim() ? data.title.trim() : canonical,
+    content,
+    dir,
+    file,
+    promptFile: promptFilePath(dir)
+  };
 
-export function taskPathFor(sabinDir: string, id: string, status: TaskStatus): string {
-  return path.join(tasksDir(sabinDir), statusDirName(status), `${id}.md`);
+  const project = typeof data.project === 'string' ? parseProjectSlug(data.project) : null;
+  if (project) task.project = project;
+  const created = asIsoDate(data.created);
+  if (created) task.created = created;
+
+  return task;
 }
 
 /**
- * Locate a task file by ID across every tasks/<status> directory.
+ * One task, or null when it does not exist. Throws `InvalidTaskIdError` for
+ * something that is not an ID at all - a typo and a missing task are
+ * different answers.
+ */
+export async function findTask(home: string, id: string): Promise<Task | null> {
+  const canonical = parseTaskId(id);
+  if (!canonical) throw new InvalidTaskIdError(id);
+  try {
+    return await readTask(home, canonical);
+  } catch (error: any) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+    throw error;
+  }
+}
+
+/** As `findTask`, but a missing task throws `TaskNotFoundError` */
+export async function getTask(home: string, id: string): Promise<Task> {
+  const task = await findTask(home, id);
+  if (!task) throw new TaskNotFoundError(parseTaskId(id) ?? id);
+  return task;
+}
+
+/** Names under tasks/ that are valid IDs, whatever state their contents are in */
+async function taskDirNames(home: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(homePaths(home).tasksDir, { withFileTypes: true });
+    return entries
+      .filter(entry => entry.isDirectory() && parseTaskId(entry.name) === entry.name)
+      .map(entry => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Every task, sorted by ID.
  *
- * Matches the whole filename, case-insensitively: `sabin-0010` finds
- * SABIN-0010.md, and SABIN-001 never matches SABIN-0010.md.
+ * Tolerant on purpose: a directory with a bad name, no task.md or broken
+ * frontmatter is skipped, so one hand-edited file never blanks the whole list.
  */
-export async function findTaskFile(sabinDir: string, id: string): Promise<string | null> {
-  const root = tasksDir(sabinDir);
-  const wanted = `${id}.md`.toLowerCase();
-
-  let dirs: string[];
-  try {
-    dirs = (await fs.readdir(root, { withFileTypes: true }))
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name);
-  } catch {
-    return null;
-  }
-
-  for (const dir of dirs) {
-    let files: string[];
-    try {
-      files = await fs.readdir(path.join(root, dir));
-    } catch {
-      continue;
-    }
-    const match = files.find(file => file.toLowerCase() === wanted);
-    if (match) return path.join(root, dir, match);
-  }
-
-  return null;
+export async function listTasks(home: string): Promise<Task[]> {
+  const names = await taskDirNames(home);
+  const tasks = await Promise.all(names.map(name => readTask(home, name).catch(() => null)));
+  return tasks.filter((task): task is Task => task !== null).sort(compareTasks);
 }
 
-export async function findTask(sabinDir: string, id: string): Promise<Task | null> {
-  const file = await findTaskFile(sabinDir, id);
-  return file ? parseTask(file) : null;
-}
-
-/**
- * Every task, whatever directory it sits in. A malformed file is skipped
- * rather than failing the whole listing.
- */
-export async function listTasks(sabinDir: string): Promise<Task[]> {
-  const root = tasksDir(sabinDir);
-  const tasks: Task[] = [];
-
-  let dirs: string[];
-  try {
-    dirs = (await fs.readdir(root, { withFileTypes: true }))
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name);
-  } catch {
-    return tasks;
-  }
-
-  for (const dir of dirs) {
-    let files: string[];
-    try {
-      files = (await fs.readdir(path.join(root, dir))).filter(file => file.endsWith('.md'));
-    } catch {
-      continue;
-    }
-
-    for (const file of files) {
-      try {
-        tasks.push(await parseTask(path.join(root, dir, file)));
-      } catch {
-        // Skip what cannot be parsed
-      }
-    }
-  }
-
-  return tasks.sort(compareTasks);
-}
-
-/**
- * Sort by numeric suffix, then by ID, so SABIN-0002 precedes SABIN-0010 and
- * external tickets group by their own prefix.
- */
+/** Sort order for tasks: by ID prefix, then numerically */
 export function compareTasks(a: Task, b: Task): number {
-  const [prefixA, numberA] = splitId(a.id);
-  const [prefixB, numberB] = splitId(b.id);
-  if (prefixA !== prefixB) return prefixA.localeCompare(prefixB);
-  return numberA - numberB;
-}
-
-function splitId(id: string): [string, number] {
-  const match = id.match(/^(.*?)-?(\d+)$/);
-  return match ? [match[1], parseInt(match[2], 10)] : [id, 0];
+  return compareTaskIds(a.id, b.id);
 }
 
 /**
- * Next free ID for the project prefix. Only the project's own tickets count -
- * an external JIRA-12345 never advances the sequence.
+ * Next free `<idPrefix>-<n>`, zero-padded to `idPadding`.
+ *
+ * Counts directory names, not parsed tasks, so a task whose task.md is
+ * broken still holds its number. External IDs never advance the sequence.
  */
-export async function nextTaskId(sabinDir: string, config: SabinConfig): Promise<string> {
-  const pattern = new RegExp(`^${escapeRegex(config.projectPrefix)}-(\\d+)$`, 'i');
-  let max = 0;
-
-  for (const task of await listTasks(sabinDir)) {
-    const match = task.id.match(pattern);
-    if (match) max = Math.max(max, parseInt(match[1], 10));
+export async function nextTaskId(home: string, config: SabinConfig): Promise<string> {
+  const prefix = String(config.idPrefix ?? '').toUpperCase();
+  if (!parseTaskId(`${prefix}-1`)) {
+    throw new SabinError(`Invalid idPrefix in config.json: "${config.idPrefix}"`, 'INVALID_CONFIG');
   }
-
-  return `${config.projectPrefix}-${String(max + 1).padStart(config.taskNumberPadding, '0')}`;
+  let max = 0;
+  for (const name of await taskDirNames(home)) {
+    const [namePrefix, number] = splitTaskId(name);
+    if (namePrefix === prefix) max = Math.max(max, number);
+  }
+  return `${prefix}-${String(max + 1).padStart(config.idPadding ?? 4, '0')}`;
 }
 
 export interface CreateTaskOptions {
   title: string;
-  content?: string;
-  /** Explicit ID such as JIRA-12345; allocated from the sequence when absent */
+  /** External ID such as ARCH-1234; allocated from the sequence when absent */
   id?: string;
-  slug?: string;
+  /** Project name or slug; normalised to a slug */
+  project?: string;
+  /** Body of task.md */
+  content?: string;
+  /** Defaults to today */
+  created?: string;
 }
 
 /**
- * Create a task file. Allocation and the write happen under the lock, so two
- * worktrees creating tasks at once cannot claim the same number.
- */
-export async function createTask(
-  sabinDir: string,
-  config: SabinConfig,
-  options: CreateTaskOptions
-): Promise<Task> {
-  return withLock(sabinDir, async () => {
-    const id = options.id?.trim() || await nextTaskId(sabinDir, config);
-
-    if (await findTaskFile(sabinDir, id)) {
-      throw new TaskExistsError(id);
-    }
-
-    const task: Task = {
-      id,
-      status: 'open',
-      title: options.title.trim() || id,
-      content: options.content ?? '',
-      path: taskPathFor(sabinDir, id, 'open')
-    };
-    if (options.slug) task.slug = options.slug;
-
-    await writeTask(task);
-    return task;
-  });
-}
-
-export interface StatusPatch {
-  branch?: string;
-  worktree?: string;
-  slug?: string;
-}
-
-/**
- * Change a task's status, moving the file between directories when needed.
+ * Create tasks/<ID>/ with task.md and prompt.md. Never a worktree.
  *
- * The one place status is written. Returns the task as it now is on disk.
+ * Allocation and the write happen under the lock, so two terminals creating
+ * tasks at once cannot claim the same number.
  */
-export async function setTaskStatus(
-  sabinDir: string,
-  id: string,
-  status: TaskStatus,
-  patch: StatusPatch = {}
-): Promise<Task> {
-  return withLock(sabinDir, async () => {
-    const file = await findTaskFile(sabinDir, id);
-    if (!file) throw new TaskNotFoundError(id);
-
-    const task = await parseTask(file);
-    const target = taskPathFor(sabinDir, task.id, status);
-
-    task.status = status;
-    if (patch.branch) task.branch = patch.branch;
-    if (patch.worktree) task.worktree = patch.worktree;
-    if (patch.slug) task.slug = patch.slug;
-    task.path = target;
-
-    await writeTask(task);
-    if (path.resolve(file) !== path.resolve(target)) {
-      await fs.unlink(file);
-    }
-
-    return task;
-  });
-}
-
-/**
- * Project instructions for a status transition, at hooks/<status>.md.
- *
- * Printed by `sabin task update` once the change lands, so an agent that
- * moves a task to `completed` is handed "push and open a PR" by the same
- * command - no extra call to remember, nothing to configure in the skill.
- */
-export function hookPath(sabinDir: string, status: TaskStatus): string {
-  return path.join(sabinDir, 'hooks', `${status}.md`);
-}
-
-export async function readHook(sabinDir: string, status: TaskStatus): Promise<string | null> {
-  try {
-    const text = (await fs.readFile(hookPath(sabinDir, status), 'utf8')).trim();
-    return text || null;
-  } catch {
-    return null;
+export async function createTask(home: string, config: SabinConfig, options: CreateTaskOptions): Promise<Task> {
+  let explicit: string | null = null;
+  if (options.id !== undefined && options.id.trim() !== '') {
+    explicit = parseTaskId(options.id);
+    if (!explicit) throw new InvalidTaskIdError(options.id);
   }
+
+  let project: string | null = null;
+  if (options.project !== undefined && options.project.trim() !== '') {
+    project = parseProjectSlug(options.project);
+    if (!project) throw new InvalidProjectError(options.project);
+  }
+
+  return withLock(home, async () => {
+    const id = explicit ?? await nextTaskId(home, config);
+    const dir = taskDirPath(home, id);
+    if (await pathExists(dir)) throw new TaskExistsError(id);
+
+    const title = options.title.trim() || id;
+    const data = {
+      status: 'open',
+      title,
+      project: project ?? undefined,
+      created: options.created ?? new Date().toISOString().slice(0, 10)
+    };
+
+    await fs.mkdir(dir, { recursive: true });
+    await writeFileAtomic(taskFilePath(dir), stringifyFrontmatter(data, options.content ?? ''));
+    await writeFileAtomic(promptFilePath(dir), promptTemplate(id, title));
+
+    return readTask(home, id);
+  });
 }
 
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Rewrite task.md's frontmatter under the lock, keeping the body and any
+ * keys we do not know about.
+ */
+async function patchTask(
+  home: string,
+  id: string,
+  patch: (data: Record<string, unknown>) => void,
+  body?: string
+): Promise<Task> {
+  const canonical = parseTaskId(id);
+  if (!canonical) throw new InvalidTaskIdError(id);
+
+  return withLock(home, async () => {
+    const file = taskFilePath(taskDirPath(home, canonical));
+    let text: string;
+    try {
+      text = await fs.readFile(file, 'utf8');
+    } catch (error: any) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') throw new TaskNotFoundError(canonical);
+      throw error;
+    }
+
+    const { data, content } = parseFrontmatter(text);
+    patch(data);
+    await writeFileAtomic(file, stringifyFrontmatter(data, body ?? content));
+    return readTask(home, canonical);
+  });
+}
+
+/**
+ * The one status write. Frontmatter only - nothing moves on disk - atomic,
+ * and under the lock. Returns the task as it now is.
+ */
+export async function setTaskStatus(home: string, id: string, status: string): Promise<Task> {
+  if (!isTaskStatus(status)) throw new InvalidTaskStatusError(status);
+  return patchTask(home, id, data => {
+    data.status = status satisfies TaskStatus;
+  });
+}
+
+export interface TaskUpdate {
+  title?: string;
+  /** A project name or slug; null removes the task from its project */
+  project?: string | null;
+}
+
+/** Edit a task's title or project. Status is deliberately not here - see `setTaskStatus`. */
+export async function updateTask(home: string, id: string, update: TaskUpdate): Promise<Task> {
+  let project: string | null | undefined = undefined;
+  if (update.project === null || update.project?.trim() === '') {
+    project = null;
+  } else if (update.project !== undefined) {
+    project = parseProjectSlug(update.project);
+    if (!project) throw new InvalidProjectError(update.project);
+  }
+
+  return patchTask(home, id, data => {
+    if (update.title !== undefined && update.title.trim()) data.title = update.title.trim();
+    if (project === null) delete data.project;
+    else if (project !== undefined) data.project = project;
+  });
+}
+
+/**
+ * Replace task.md's body - everything below the frontmatter - keeping the
+ * frontmatter, unknown keys included. What an editor that shows only the body
+ * saves through: title, status and project are not the body's to change, and
+ * a concurrent `setTaskStatus` must not be lost to a stale buffer. Under the
+ * lock, atomic.
+ */
+export async function setTaskBody(home: string, id: string, body: string): Promise<Task> {
+  return patchTask(home, id, () => undefined, body);
 }

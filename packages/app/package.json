@@ -1,0 +1,68 @@
+{
+  "name": "@sabin/app",
+  "productName": "Sabin",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Sabin",
+  "description": "Sabin desktop app: the command center for parallel coding agents",
+  "main": "dist/main/main.js",
+  "bin": {
+    "sabin-app": "bin/sabin-app.js"
+  },
+  "scripts": {
+    "build": "npm run build:renderer && npm run build:main",
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "lint": "eslint src test e2e scripts bin",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "package": "npm run build && electron-builder --mac dir --arm64 --publish never"
+  },
+  "devDependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@eslint/js": "^10.0.1",
+    "@lezer/highlight": "^1.2.1",
+    "@playwright/test": "^1.65.1",
+    "@preact/preset-vite": "^2.10.6",
+    "@sabin/core": "^0.1.0",
+    "@types/node": "^22.20.5",
+    "dompurify": "^3.4.18",
+    "electron": "45.3.3",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0",
+    "marked": "^18.2.1",
+    "preact": "^11.2.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "build": {
+    "appId": "dev.sabin.app",
+    "productName": "Sabin",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [{ "target": "dir", "arch": ["arm64"] }],
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Sabin focuses your agents' iTerm2 tabs and opens new tabs in task worktrees."
+      }
+    },
+    "npmRebuild": false
+  }
+}

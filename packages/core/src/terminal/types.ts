@@ -3,10 +3,9 @@ import { ForegroundJob } from './processes';
 /**
  * One live terminal session, as the terminal itself reports it.
  *
- * Deliberately says nothing about tickets or agents: a driver knows about
- * windows and processes, and `sessions.ts` is what turns that into "this is
- * SABIN-0017's Claude Code". Keeping the two apart is what lets a second
- * driver - tmux, WezTerm - be a new file rather than a rewrite.
+ * Deliberately says nothing about tasks or agents: a driver knows about
+ * windows and processes, and `terminalSessions.ts` is what turns that into
+ * "this is SABIN-0017's Codex".
  */
 export interface TerminalSession {
   /** Stable for the life of the session; the key `focus()` takes */
@@ -19,10 +18,9 @@ export interface TerminalSession {
    * The tty's foreground process group, leader first.
    *
    * A group, not a process, because the interesting one is not always the
-   * leader: `sabin implement` stays alive as the parent of the agent it
-   * launched, while Claude Code is itself the parent of its mcpbridge. Which
-   * member matters depends on which agents are configured, so the choice
-   * belongs to `sessions.ts`, not here.
+   * leader: a wrapper script can parent the agent, while Claude Code is
+   * itself the parent of its mcpbridge. The choice belongs to
+   * `terminalSessions.ts`, not here.
    */
   jobs: ForegroundJob[];
 }
@@ -40,8 +38,8 @@ export interface OpenTabOptions {
   windowId?: string;
   /** Ignore `windowId` and make a new window */
   newWindow?: boolean;
-  /** Tags the session as this ticket's, in a variable the shell cannot clobber */
-  ticket?: string;
+  /** Tags the session as this task's (`user.sabinTask`), in a variable the shell cannot clobber */
+  taskId?: string;
 }
 
 export interface TerminalDriver {
@@ -51,6 +49,6 @@ export interface TerminalDriver {
   listSessions(): Promise<TerminalSession[]>;
   /** Bring a session to the front: its window, its tab, and the app itself */
   focus(sessionId: string): Promise<boolean>;
-  /** Open a tab, by preference in a window that is already this ticket's */
+  /** Open a tab, by preference in a window that is already this task's */
   openTab(options: OpenTabOptions): Promise<void>;
 }
