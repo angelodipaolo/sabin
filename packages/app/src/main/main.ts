@@ -168,7 +168,7 @@ function ensureWindow(): BrowserWindow {
 function buildMenu(): void {
   const send = (command: AppCommand) => () => sendCommand(command);
   const template: MenuItemConstructorOptions[] = [
-    { role: 'appMenu' },
+    { role: 'appMenu', label: 'Sabin' },
     {
       label: 'File',
       submenu: [
@@ -195,6 +195,8 @@ function buildMenu(): void {
         { id: 'list', label: 'Task List', accelerator: 'CmdOrCtrl+1', click: send('list') },
         { id: 'switcher', label: 'Go to Task…', accelerator: 'CmdOrCtrl+K', click: send('switcher') },
         { id: 'back', label: 'Back', accelerator: 'CmdOrCtrl+[', click: send('back') },
+        { id: 'previous-tab', label: 'Previous Tab', accelerator: 'CmdOrCtrl+Shift+[', click: send('previous-tab') },
+        { id: 'next-tab', label: 'Next Tab', accelerator: 'CmdOrCtrl+Shift+]', click: send('next-tab') },
         { type: 'separator' },
         { label: 'Reload Data', accelerator: 'CmdOrCtrl+R', click: () => void refresh() },
         ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' } as MenuItemConstructorOptions]),

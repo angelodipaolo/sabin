@@ -8,6 +8,7 @@ import {
   findRepo,
   getTask,
   isTaskStatus,
+  nextTaskId,
   readConfig,
   removeRepo,
   setTaskStatus,
@@ -80,6 +81,9 @@ export function registerIpc(ctx: IpcContext): void {
   handle('home:create', () => mutate(async () => {
     await ensureHome(home);
   }));
+
+  handle('task:nextId', (project: unknown) => wrap(async () =>
+    nextTaskId(home, await readConfig(home), project === undefined ? undefined : str(project, 'a project'))));
 
   handle('task:create', (input: { title?: unknown; id?: unknown; project?: unknown }) => mutate(async () => {
     const config = await readConfig(home);

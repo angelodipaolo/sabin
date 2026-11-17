@@ -16,7 +16,7 @@ let tree: string;
 beforeEach(async () => {
   box = await sandbox();
   repo = await makeRepo(box.root, 'site');
-  await newTask('Redesign the landing page', { project: 'web' });
+  await newTask('Redesign the landing page', { project: 'web', id: 'TASK-0001' });
   await newTask('Partition events', { id: 'ARCH-1234', project: 'analytics' });
   await newTask('Old cleanup');
   await setTaskStatus(box.home, 'TASK-0002', 'completed');

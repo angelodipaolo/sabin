@@ -76,7 +76,7 @@ export function QuickSwitcher({ snapshot, onClose }: { snapshot: Snapshot; onClo
               onMouseMove={() => setIndex(position)}
               onClick={() => actions.openTask(item.id)}
             >
-              <span class="mono switcher-id">{item.id}</span>
+              <span class="mono switcher-id" title={item.id}>{item.id}</span>
               <span class="switcher-title">{item.title}</span>
               {item.project && <span class="switcher-project">{item.project}</span>}
               <StatusLabel status={item.status} />

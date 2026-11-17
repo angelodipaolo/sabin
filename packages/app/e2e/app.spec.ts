@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { test, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import { parseFrontmatter } from '@sabin/core';
 import { appEnv, buildFixture, Fixture } from './fixture';
@@ -19,7 +20,8 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
   fixture = await buildFixture();
-  app = await electron.launch({ args: [appDir], env: appEnv(fixture) });
+  const executablePath = execFileSync(process.execPath, ['-p', "require('./bin/electron-path').electronPath()"], { cwd: appDir, encoding: 'utf8' }).trim();
+  app = await electron.launch({ executablePath, args: [appDir], env: appEnv(fixture) });
   page = await app.firstWindow();
   await page.waitForSelector('[data-group]');
 });
@@ -48,6 +50,13 @@ async function taskFile(id: string, name = 'task.md'): Promise<string> {
 }
 
 test('renders the attention list in group order', async () => {
+  expect(await app.evaluate(({ app }) => app.getName())).toBe('Sabin');
+  if (process.platform === 'darwin') {
+    const executable = await app.evaluate(({ app }) => app.getPath('exe'));
+    expect(executable).toContain('/Sabin.app/');
+    const plist = path.resolve(executable, '../../Info.plist');
+    expect(execFileSync('/usr/bin/plutil', ['-extract', 'CFBundleDisplayName', 'raw', plist], { encoding: 'utf8' }).trim()).toBe('Sabin');
+  }
   const groups = await page.locator('[data-group]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-group')));
   expect(groups).toEqual(['needs-you', 'working', 'in_progress', 'ready', 'open', 'completed', 'others']);
 
@@ -93,7 +102,8 @@ test('opens a task from the keyboard', async () => {
 
 test('edits and saves a note', async () => {
   await page.locator('[data-task-id="SABIN-0001"]').click();
-  await page.locator('[data-file="research.md"]').click();
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'research.md', exact: true }).click();
   const editor = page.locator('[data-testid="editor"] .cm-content');
   await expect(editor).toContainText('WebContentsView');
   await editor.click();
@@ -190,11 +200,13 @@ test('quick switcher finds tasks by fuzzy title and status', async () => {
 
 test('creates a task', async () => {
   await menu('new-task');
+  await expect(page.locator('input[name="id"]')).toHaveValue('SABIN-0011');
   await page.locator('input[name="title"]').fill('Dock badge for waiting agents');
   await page.locator('.sheet select[name="project"]').selectOption('command-center');
+  await expect(page.locator('input[name="id"]')).toHaveValue('COMMANDCENTER-0001');
   await page.getByRole('button', { name: 'Create Task' }).click();
-  await expect(page.locator('.task-id')).toHaveText('SABIN-0011');
-  const { data } = parseFrontmatter(await taskFile('SABIN-0011'));
+  await expect(page.locator('.task-id')).toHaveText('COMMANDCENTER-0001');
+  const { data } = parseFrontmatter(await taskFile('COMMANDCENTER-0001'));
   expect(data).toMatchObject({ title: 'Dock badge for waiting agents', status: 'open', project: 'command-center' });
   await expect(page.locator('[data-file="prompt.md"]')).toBeVisible();
 });
@@ -222,4 +234,72 @@ test('a second launch with --task focuses this window and opens the task', async
   await new Promise(resolve => child.on('exit', resolve));
   await expect(page.locator('.task-id')).toHaveText('SABIN-0003', { timeout: 15_000 });
   expect(app.windows()).toHaveLength(1);
+});
+
+
+test('changes status directly from the list without opening the task', async () => {
+  await menu('list');
+  const row = page.locator('[data-task-id="SABIN-0005"]');
+  await row.getByRole('combobox', { name: 'Status for SABIN-0005' }).selectOption('ready');
+  await expect.poll(async () => parseFrontmatter(await taskFile('SABIN-0005')).data.status).toBe('ready');
+  await expect(page.locator('.task-view')).toHaveCount(0);
+  await expect(page.locator('[data-group="ready"] [data-task-id="SABIN-0005"]')).toBeVisible();
+});
+
+test('browses notes, keeps multiple tabs, closes and reopens notes, and cycles tabs', async () => {
+  await page.locator('[data-task-id="SABIN-0001"]').click();
+  const browse = page.getByRole('button', { name: 'Notes', exact: true });
+  await browse.click();
+  await expect(page.getByRole('menuitem').first()).toHaveText('Note');
+  for (const name of ['task.md', 'prompt.md', 'plan.md', 'log.md']) {
+    await expect(page.getByRole('menuitem', { name, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: `Close ${name}`, exact: true })).toHaveCount(0);
+  }
+  await page.getByRole('menuitem', { name: 'research.md', exact: true }).click();
+  await browse.click();
+  await page.getByRole('menuitem', { name: 'Note', exact: true }).click();
+  await page.locator('.sheet input').fill('second.md');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('[data-file="research.md"]')).toBeVisible();
+  await expect(page.locator('[data-file="second.md"]')).toHaveAttribute('aria-selected', 'true');
+  if (process.env.SABIN_APP_SHOTS) {
+    await fs.mkdir(process.env.SABIN_APP_SHOTS, { recursive: true });
+    await browse.click();
+    await page.screenshot({ path: path.join(process.env.SABIN_APP_SHOTS, '13-notes-menu-and-tabs.png') });
+    await browse.click();
+  }
+  const editor = page.locator('[data-testid="editor"] .cm-content');
+  await editor.click();
+  await page.keyboard.type('Save when switching tabs');
+  await menu('previous-tab');
+  await expect(page.locator('[data-file="research.md"]')).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => taskFile('SABIN-0001', 'second.md')).toContain('Save when switching tabs');
+  await menu('next-tab');
+  await expect(page.locator('[data-file="second.md"]')).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Control+Tab');
+  await expect(page.locator('[data-file="task.md"]')).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Control+Shift+Tab');
+  await expect(page.locator('[data-file="second.md"]')).toHaveAttribute('aria-selected', 'true');
+  await editor.click();
+  await page.keyboard.press('Meta+ArrowDown');
+  await page.keyboard.type(' and closing');
+  await page.getByRole('button', { name: 'Close second.md', exact: true }).click();
+  await expect(page.locator('[data-file="second.md"]')).toHaveCount(0);
+  await expect.poll(() => taskFile('SABIN-0001', 'second.md')).toContain('Save when switching tabs and closing');
+  await browse.click();
+  await page.getByRole('menuitem', { name: 'second.md', exact: true }).click();
+  await expect(editor).toContainText('Save when switching tabs and closing');
+});
+
+test('keeps a custom ID when the selected project changes', async () => {
+  await menu('new-task');
+  await expect(page.locator('input[name="title"]')).toBeFocused();
+  await page.locator('input[name="id"]').fill('CUSTOM-42');
+  await expect(page.locator('input[name="id"]')).toHaveValue('CUSTOM-42');
+  await page.locator('.sheet select[name="project"]').selectOption('billing');
+  await expect(page.locator('input[name="id"]')).toHaveValue('CUSTOM-42');
+  await page.locator('input[name="title"]').fill('Custom ticket');
+  await page.getByRole('button', { name: 'Create Task' }).click();
+  await expect(page.locator('.task-id')).toHaveText('CUSTOM-42');
+  expect(parseFrontmatter(await taskFile('CUSTOM-42')).data.project).toBe('billing');
 });

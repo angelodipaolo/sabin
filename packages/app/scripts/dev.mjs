@@ -19,7 +19,7 @@ const server = await createServer({ configFile: `${root}vite.config.mts`, server
 await server.listen();
 const url = server.resolvedUrls.local[0];
 
-const electron = spawn(require('electron'), [root, ...process.argv.slice(2)], {
+const electron = spawn(require('../bin/electron-path').electronPath(), [root, ...process.argv.slice(2)], {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, SABIN_APP_DEV_URL: url, SABIN_APP_USER_DATA: process.env.SABIN_APP_USER_DATA ?? `${root}.dev-profile` }

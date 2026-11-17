@@ -98,13 +98,17 @@ export function compareTasks(a: Task, b: Task): number {
 }
 
 /**
- * Next free `<idPrefix>-<n>`, zero-padded to `idPadding`.
+ * Next free `<prefix>-<n>`, zero-padded to `idPadding`. A project slug
+ * supplies the prefix; otherwise use the configured idPrefix.
  *
  * Counts directory names, not parsed tasks, so a task whose task.md is
  * broken still holds its number. External IDs never advance the sequence.
  */
-export async function nextTaskId(home: string, config: SabinConfig): Promise<string> {
-  const prefix = String(config.idPrefix ?? '').toUpperCase();
+export async function nextTaskId(home: string, config: SabinConfig, project?: string): Promise<string> {
+  const projectPrefix = parseProjectSlug(project)?.replace(/-/g, '').toUpperCase();
+  const prefix = projectPrefix
+    ? (/^[A-Z]/.test(projectPrefix) ? projectPrefix : `P${projectPrefix}`)
+    : String(config.idPrefix ?? '').toUpperCase();
   if (!parseTaskId(`${prefix}-1`)) {
     throw new SabinError(`Invalid idPrefix in config.json: "${config.idPrefix}"`, 'INVALID_CONFIG');
   }
@@ -118,7 +122,7 @@ export async function nextTaskId(home: string, config: SabinConfig): Promise<str
 
 export interface CreateTaskOptions {
   title: string;
-  /** External ID such as ARCH-1234; allocated from the sequence when absent */
+  /** External ID such as ARCH-1234; allocated from the project/config sequence when absent */
   id?: string;
   /** Project name or slug; normalised to a slug */
   project?: string;
@@ -148,7 +152,7 @@ export async function createTask(home: string, config: SabinConfig, options: Cre
   }
 
   return withLock(home, async () => {
-    const id = explicit ?? await nextTaskId(home, config);
+    const id = explicit ?? await nextTaskId(home, config, project ?? undefined);
     const dir = taskDirPath(home, id);
     if (await pathExists(dir)) throw new TaskExistsError(id);
 
