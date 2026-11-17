@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { BrowserWindow } from 'electron';
 
-vi.mock('electron', () => ({ shell: {}, WebContentsView: class {}, BrowserWindow: class {} }));
+const native = vi.hoisted(() => ({ setBounds: vi.fn() }));
+vi.mock('electron', () => ({
+  shell: {},
+  BrowserWindow: class {},
+  WebContentsView: class {
+    webContents = { on: vi.fn(), setWindowOpenHandler: vi.fn(), loadURL: vi.fn() };
+    setBounds = native.setBounds;
+    setVisible = vi.fn();
+  }
+}));
 
-const { isAllowedReviewUrl, parseRedeOutput } = await import('../src/main/rede');
+const { isAllowedReviewUrl, parseRedeOutput, ReviewView } = await import('../src/main/rede');
+
+it.each([0.8, 1, 1.5])('positions the native review view at zoom factor %s', zoom => {
+  const win = {
+    webContents: { getZoomFactor: () => zoom },
+    contentView: { addChildView: vi.fn() }
+  } as unknown as BrowserWindow;
+  const review = new ReviewView(() => win);
+  const url = 'http://127.0.0.1:5000/r/working';
+  review.allow(url);
+  review.show(url, { x: 250, y: 100, width: 800, height: 600 });
+  expect(native.setBounds).toHaveBeenLastCalledWith({ x: 250 * zoom, y: 100 * zoom, width: 800 * zoom, height: 600 * zoom });
+});
 
 describe('parseRedeOutput', () => {
   it('reads the title and URL rede prints', () => {

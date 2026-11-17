@@ -314,3 +314,38 @@ test('keeps a custom ID when the selected project changes', async () => {
   await expect(page.locator('.task-id')).toHaveText('CUSTOM-42');
   expect(parseFrontmatter(await taskFile('CUSTOM-42')).data.project).toBe('billing');
 });
+
+test('registers text size shortcuts and changes zoom while editing', async () => {
+  const accelerators = await app.evaluate(({ Menu }) => ['zoom-in', 'zoom-in-equals', 'zoom-out', 'zoom-reset'].map(
+    id => Menu.getApplicationMenu()!.getMenuItemById(id)!.accelerator
+  ));
+  expect(accelerators).toEqual(['CmdOrCtrl+Plus', 'CmdOrCtrl+=', 'CmdOrCtrl+-', 'CmdOrCtrl+0']);
+  await menu('switcher');
+  await page.locator('.switcher input').fill('Command center desktop app');
+  await page.keyboard.press('Enter');
+  const editor = page.locator('[data-testid="editor"] .cm-content');
+  await expect(editor).toBeVisible();
+  await editor.click();
+  const content = await editor.innerText();
+  const zoom = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomLevel());
+  const changeZoom = (id: string) => app.evaluate(({ Menu, BrowserWindow }, itemId) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    Menu.getApplicationMenu()!.getMenuItemById(itemId)!.click({}, win, win.webContents);
+  }, id);
+  // DevTools key events bypass native macOS menu accelerators. Invoke the
+  // registered menu actions to exercise their zoom behavior in Electron.
+  await changeZoom('zoom-in-equals');
+  await expect.poll(zoom).toBeGreaterThan(0);
+  const increased = await zoom();
+  await changeZoom('zoom-in');
+  await expect.poll(zoom).toBeGreaterThan(increased);
+  await changeZoom('zoom-out');
+  await expect.poll(zoom).toBeCloseTo(increased);
+  await changeZoom('zoom-reset');
+  await expect.poll(zoom).toBe(0);
+  await changeZoom('zoom-out');
+  await expect.poll(zoom).toBeLessThan(0);
+  await changeZoom('zoom-reset');
+  await expect.poll(zoom).toBe(0);
+  await expect(editor).toHaveText(content, { useInnerText: true });
+});

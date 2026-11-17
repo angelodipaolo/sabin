@@ -113,13 +113,15 @@ export class ReviewView {
     const win = this.window();
     if (!win) return;
     const view = this.ensure(win);
-    this.bounds = bounds;
-    view.setBounds({
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width: Math.max(0, Math.round(bounds.width)),
-      height: Math.max(0, Math.round(bounds.height))
-    });
+    // Renderer rectangles use CSS pixels; native view bounds use screen points.
+    const zoom = win.webContents.getZoomFactor();
+    this.bounds = {
+      x: Math.round(bounds.x * zoom),
+      y: Math.round(bounds.y * zoom),
+      width: Math.max(0, Math.round(bounds.width * zoom)),
+      height: Math.max(0, Math.round(bounds.height * zoom))
+    };
+    view.setBounds(this.bounds);
     view.setVisible(true);
     if (url !== this.url) {
       this.port = new URL(url).port;
