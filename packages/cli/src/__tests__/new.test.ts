@@ -49,8 +49,8 @@ describe('sabin new', () => {
     await newTask('Json please', { json: true, project: 'web' });
     const result = JSON.parse(box.out());
     expect(Object.keys(result)).toEqual(['id', 'title', 'status', 'project', 'created', 'taskDir', 'taskFile']);
-    expect(result).toMatchObject({ id: 'TASK-0001', status: 'open', project: 'web' });
-    expect(result.taskFile).toBe(path.join(box.home, 'tasks', 'TASK-0001', 'task.md'));
+    expect(result).toMatchObject({ id: 'WEB-0001', status: 'open', project: 'web' });
+    expect(result.taskFile).toBe(path.join(box.home, 'tasks', 'WEB-0001', 'task.md'));
     expect(box.out()).not.toContain('prompt.md');
   });
 });

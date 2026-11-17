@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AttentionRow, groupTasks, lastLine, liveUnassigned, matchesFilter } from '../../shared/attention';
 import { plainText } from '../../shared/text';
 import { duration } from '../../shared/time';
-import type { ProjectFilter, SessionInfo, Snapshot } from '../../shared/types';
+import { TASK_STATUSES, STATUS_LABELS, TaskStatus, ProjectFilter, SessionInfo, Snapshot } from '../../shared/types';
 import { api } from '../api';
 import { useActions } from '../App';
 import { AgentBadge, Button, Icon, Kbd, WorkspaceChip, tildify } from './bits';
@@ -183,6 +183,7 @@ interface RowProps {
 }
 
 function TaskRow({ row, now, showProject, selected, onOpen, onSelect }: RowProps) {
+  const actions = useActions();
   const { task, primary, reason } = row;
   const line = lastLine(primary);
   const quiet = task.workspaces.length === 0 && task.sessions.length === 0;
@@ -196,7 +197,7 @@ function TaskRow({ row, now, showProject, selected, onOpen, onSelect }: RowProps
       onClick={onOpen}
       onMouseDown={onSelect}
     >
-      <span class="row-id mono">{task.id}</span>
+      <span class="row-id mono" title={task.id}>{task.id}</span>
       <div class="row-body">
         <div class="row-line">
           <span class="row-title">{task.title}</span>
@@ -211,6 +212,15 @@ function TaskRow({ row, now, showProject, selected, onOpen, onSelect }: RowProps
         )}
       </div>
       <div class="row-meta">
+        <label class={`select-wrap status-select status-${task.status}`} onClick={event => event.stopPropagation()}>
+          <span class="status-dot" aria-hidden="true" />
+          <select aria-label={`Status for ${task.id}`} value={task.status} onChange={async event => {
+            const result = await api.setStatus(task.id, event.currentTarget.value as TaskStatus);
+            if (!result.ok) actions.toast(result.error);
+          }}>
+            {TASK_STATUSES.map(status => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}
+          </select>
+        </label>
         {task.workspaces.map(workspace => <WorkspaceChip key={workspace.path} workspace={workspace} />)}
         {primary && <AgentBadge session={primary} now={now} />}
         {reason === 'waiting' && row.waitingSince && primary?.activity !== 'waiting' && (

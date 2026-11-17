@@ -135,7 +135,7 @@ export interface Bounds {
 }
 
 /** Menu commands main forwards to the renderer, so accelerators work even when the review view has focus */
-export type AppCommand = 'switcher' | 'new-task' | 'list' | 'back';
+export type AppCommand = 'switcher' | 'new-task' | 'list' | 'back' | 'next-tab' | 'previous-tab';
 
 export interface SabinApi {
   getSnapshot(): Promise<Snapshot>;
@@ -143,6 +143,7 @@ export interface SabinApi {
   initialTask(): Promise<string | null>;
   createHome(): Promise<Result>;
 
+  nextTaskId(project?: string): Promise<Result<string>>;
   createTask(input: { title: string; id?: string; project?: string }): Promise<Result<string>>;
   setStatus(id: string, status: TaskStatus): Promise<Result>;
   updateTask(id: string, update: { title?: string; project?: string | null }): Promise<Result>;

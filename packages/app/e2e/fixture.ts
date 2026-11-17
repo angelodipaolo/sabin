@@ -97,8 +97,8 @@ export async function buildFixture(livePid = process.pid): Promise<Fixture> {
     { title: 'Upgrade Electron to 45', project: 'command-center', status: 'completed' },
     { title: 'Rate limiter for the public API', status: 'review', id: 'ARCH-1234', body: 'Token bucket per API key.\n' }
   ];
-  for (const spec of specs) {
-    const task = await createTask(home, config, { title: spec.title, project: spec.project, id: spec.id, content: spec.body ?? '', created: '2026-11-10' });
+  for (const [index, spec] of specs.entries()) {
+    const task = await createTask(home, config, { title: spec.title, project: spec.project, id: spec.id ?? `SABIN-${String(index + 1).padStart(4, '0')}`, content: spec.body ?? '', created: '2026-11-10' });
     if (spec.status !== 'open') await setTaskStatus(home, task.id, spec.status);
   }
 

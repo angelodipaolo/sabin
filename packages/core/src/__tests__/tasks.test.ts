@@ -56,6 +56,16 @@ describe('createTask', () => {
     expect(await nextTaskId(home, config)).toBe('SABIN-0008');
   });
 
+  it('allocates project IDs independently and counts broken directories', async () => {
+    await fs.mkdir(path.join(home, 'tasks', 'SABINAPP-0007'), { recursive: true });
+    expect(await nextTaskId(home, config, 'Sabin App')).toBe('SABINAPP-0008');
+    const tasks = await Promise.all(Array.from({ length: 3 }, () => createTask(home, config, { title: 'T', project: 'Sabin App' })));
+    expect(tasks.map(task => task.id).sort()).toEqual(['SABINAPP-0008', 'SABINAPP-0009', 'SABINAPP-0010']);
+    expect(await nextTaskId(home, config)).toBe('SABIN-0001');
+    expect(await nextTaskId(home, config, '123 App')).toBe('P123APP-0001');
+    expect((await createTask(home, config, { title: 'External', project: 'Sabin', id: 'ARCH-12' })).id).toBe('ARCH-12');
+  });
+
   it('pads to idPadding', async () => {
     expect(await nextTaskId(home, { ...config, idPadding: 2 })).toBe('SABIN-01');
   });

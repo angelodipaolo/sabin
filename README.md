@@ -70,6 +70,11 @@ Worktrees are never removed for you.
 }
 ```
 
+New task IDs use the project slug as the prefix (`sabin` → `SABIN-0001`).
+Spaces and hyphens are removed; a prefix that starts with a digit gets `P`
+before it. Each prefix has its own sequence. Tasks without a project use
+`idPrefix`. An explicit `--id` overrides allocation.
+
 A missing file means defaults. Repos are added by `sabin work` (the repo you
 run it in) or `sabin repo add`; `worktreesRoot` defaults to
 `../<repo>-worktrees` and `postCreate` runs in each new worktree.
@@ -102,6 +107,15 @@ prints every file it touched. **Codex runs new hooks only after you trust them**
 open `/hooks` in Codex once and approve the `sabin agent-state` entries.
 
 Without hooks, everything works except agent activity in `ls` and the app.
+
+In the desktop app, use **Notes** to browse or create notes. Notes open in
+separate tabs. The × button closes a note tab and keeps its file. Use
+**Ctrl+Tab** / **Ctrl+Shift+Tab** or **⌘⇧]** / **⌘⇧[** to move between
+open file tabs. These commands are also in the View menu.
+
+On macOS, the desktop launchers cache a named `Sabin.app` runtime under
+`packages/app/node_modules/.cache/sabin`. The first launch prepares the copy.
+The installed Electron runtime stays unchanged.
 
 ## Review
 

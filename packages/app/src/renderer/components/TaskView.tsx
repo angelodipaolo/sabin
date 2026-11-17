@@ -1,5 +1,5 @@
 import type { RefObject } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { TASK_STATUSES, STATUS_LABELS, Snapshot, TaskFileEntry, TaskStatus, TaskSummary, WorkspaceInfo } from '../../shared/types';
 import { api } from '../api';
 import { useActions } from '../App';
@@ -85,7 +85,6 @@ export function TaskView({ task, snapshot, now, backHandler }: Props) {
         <div class="task-body">
           <div class="task-main">
             <Editor
-              key={`${task.id}/${current}`}
               taskId={task.id}
               name={current}
               version={snapshot.version}
@@ -197,6 +196,71 @@ function FileTabs({ task, files, current, onSelect }: { task: TaskSummary; files
   const actions = useActions();
   const fixed = FILE_ORDER.map(name => files.find(entry => entry.name === name)).filter((entry): entry is TaskFileEntry => Boolean(entry));
   const notes = files.filter(entry => entry.kind === 'note');
+  const [openNotes, setOpenNotes] = useState<string[]>(() => FILE_ORDER.includes(current) ? [] : [current]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const tabList = useRef<HTMLDivElement>(null);
+  const select = (name: string) => {
+    if (!FILE_ORDER.includes(name)) setOpenNotes(names => names.includes(name) ? names : [...names, name]);
+    onSelect(name);
+    setMenuOpen(false);
+  };
+  const opened = openNotes.map(name => notes.find(entry => entry.name === name)).filter((entry): entry is TaskFileEntry => Boolean(entry));
+  const tabs = [...fixed, ...opened];
+
+  useEffect(() => {
+    if (files.length === 0) return;
+    setOpenNotes(names => names.filter(name => notes.some(entry => entry.name === name)));
+  }, [files]);
+
+  useLayoutEffect(() => {
+    const navigate = (offset: number) => {
+      if (actions.overlay) return;
+      const available = tabs.filter(entry => entry.exists);
+      if (available.length === 0) return;
+      const index = available.findIndex(entry => entry.name === current);
+      select(available[(index + offset + available.length) % available.length].name);
+    };
+    const off = api.onCommand(command => {
+      if (command === 'next-tab') navigate(1);
+      if (command === 'previous-tab') navigate(-1);
+    });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === 'Tab' && !actions.overlay) {
+        event.preventDefault();
+        event.stopPropagation();
+        navigate(event.shiftKey ? -1 : 1);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { off(); window.removeEventListener('keydown', onKey, true); };
+  }, [current, files, openNotes, actions.overlay]);
+
+  useLayoutEffect(() => {
+    tabList.current?.querySelector('.is-current')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [current, files, openNotes]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const dismiss = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+      } else if ((event.target as HTMLElement).closest('.notes-picker')) return;
+      setMenuOpen(false);
+    };
+    window.addEventListener('mousedown', dismiss);
+    window.addEventListener('keydown', dismiss, true);
+    return () => { window.removeEventListener('mousedown', dismiss); window.removeEventListener('keydown', dismiss, true); };
+  }, [menuOpen]);
+
+  const close = (name: string) => {
+    setOpenNotes(names => names.filter(item => item !== name));
+    if (current === name) {
+      const index = tabs.findIndex(entry => entry.name === name);
+      onSelect(tabs[Math.max(0, index - 1)]?.name ?? 'task.md');
+    }
+  };
 
   const create = async (name: string) => {
     const result = await api.createFile(task.id, name);
@@ -204,7 +268,7 @@ function FileTabs({ task, files, current, onSelect }: { task: TaskSummary; files
       actions.toast(result.error);
       return result.error;
     }
-    onSelect(result.value);
+    select(result.value);
     return null;
   };
 
@@ -216,7 +280,7 @@ function FileTabs({ task, files, current, onSelect }: { task: TaskSummary; files
     submit: async name => {
       const result = await api.createFile(task.id, name);
       if (!result.ok) return result.error;
-      onSelect(result.value);
+      select(result.value);
       return null;
     }
   });
@@ -233,14 +297,15 @@ function FileTabs({ task, files, current, onSelect }: { task: TaskSummary; files
         submit: async next => {
           const result = await api.renameFile(task.id, name, next);
           if (!result.ok) return result.error;
-          if (current === name) onSelect(result.value);
+          setOpenNotes(names => names.map(item => item === name ? result.value : item));
+          if (current === name) select(result.value);
           return null;
         }
       });
     } else if (choice === 'delete') {
       const result = await api.deleteFile(task.id, name);
       if (!result.ok) actions.toast(result.error);
-      else if (result.value && current === name) onSelect('task.md');
+      else if (result.value) close(name);
     } else if (choice === 'reveal') {
       const result = await api.revealFile(task.id, name);
       if (!result.ok) actions.toast(result.error);
@@ -257,30 +322,39 @@ function FileTabs({ task, files, current, onSelect }: { task: TaskSummary; files
       );
     }
     return (
-      <button
-        type="button"
-        key={entry.name}
-        class={`file-tab ${current === entry.name ? 'is-current' : ''}`}
-        onClick={() => onSelect(entry.name)}
-        onContextMenu={event => void contextMenu(event, entry.name)}
-        data-file={entry.name}
-      >
-        {entry.name}
-      </button>
+      <div class={`file-tab-group ${current === entry.name ? 'is-current' : ''}`} key={entry.name} onMouseDown={event => event.preventDefault()}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={current === entry.name}
+          class={`file-tab ${current === entry.name ? 'is-current' : ''}`}
+          onClick={() => select(entry.name)}
+          onContextMenu={event => void contextMenu(event, entry.name)}
+          data-file={entry.name}
+        >
+          {entry.name}
+        </button>
+        {entry.kind === 'note' && <button type="button" class="tab-close" aria-label={`Close ${entry.name}`} onClick={() => close(entry.name)}>×</button>}
+      </div>
     );
   };
 
   return (
     <>
-      <div class="file-tabs" role="tablist" aria-label="Files">
+      <div class="file-tabs" ref={tabList} role="tablist" aria-label="Files">
         {fixed.map(tab)}
-        {notes.length > 0 && <span class="file-sep" />}
-        {notes.map(tab)}
+        {opened.length > 0 && <span class="file-sep" />}
+        {opened.map(tab)}
       </div>
-      <button type="button" class="file-tab file-new" onClick={newNote} title="New Note" aria-label="New Note">
-        <Icon name="plus" size={11} />
-        <span>Note</span>
-      </button>
+      <div class="notes-picker">
+        <button type="button" class="file-tab file-new" onClick={() => setMenuOpen(value => !value)} aria-expanded={menuOpen} aria-haspopup="menu" title="Browse notes">
+          <span>Notes</span><Icon name="chevron" size={10} />
+        </button>
+        {menuOpen && <div class="notes-menu" role="menu" aria-label="Notes">
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); newNote(); }}><Icon name="plus" size={11} /> Note</button>
+          {notes.map(entry => <button type="button" role="menuitem" key={entry.name} onClick={() => select(entry.name)}>{entry.name}</button>)}
+        </div>}
+      </div>
     </>
   );
 }

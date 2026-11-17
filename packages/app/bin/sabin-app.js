@@ -16,10 +16,10 @@ if (!fs.existsSync(main)) {
 
 let electron;
 try {
-  // The electron package exports the path of its binary
-  electron = require('electron');
-} catch {
-  console.error('Electron is not installed. Run npm install at the Sabin repository root.');
+  // Use the named macOS runtime, or the installed binary on other platforms
+  electron = require('./electron-path').electronPath();
+} catch (error) {
+  console.error(`Could not prepare the Sabin runtime: ${error.message}`);
   process.exit(1);
 }
 

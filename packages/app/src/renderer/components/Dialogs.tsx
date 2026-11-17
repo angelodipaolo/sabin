@@ -30,7 +30,9 @@ export function Sheet({ title, onClose, children, width = 440 }: { title: string
 export function NewTaskDialog({ snapshot, project, onClose }: { snapshot: Snapshot; project?: string; onClose(): void }) {
   const actions = useActions();
   const [title, setTitle] = useState('');
-  const [id, setId] = useState('');
+  const [id, setId] = useState(snapshot.nextId ?? '');
+  const [suggested, setSuggested] = useState(snapshot.nextId ?? '');
+  const editedId = useRef(false);
   const [slug, setSlug] = useState(project ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,11 +40,25 @@ export function NewTaskDialog({ snapshot, project, onClose }: { snapshot: Snapsh
 
   useEffect(() => titleRef.current?.focus(), []);
 
+  useEffect(() => {
+    let stale = false;
+    void api.nextTaskId(slug || undefined).then(result => {
+      if (stale) return;
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSuggested(result.value);
+      if (!editedId.current) setId(result.value);
+    });
+    return () => { stale = true; };
+  }, [slug, snapshot.version]);
+
   const submit = async (event: Event) => {
     event.preventDefault();
     if (!title.trim() || busy) return;
     setBusy(true);
-    const result = await api.createTask({ title: title.trim(), id: id.trim() || undefined, project: slug || undefined });
+    const result = await api.createTask({ title: title.trim(), id: id.trim() === suggested ? undefined : id.trim() || undefined, project: slug || undefined });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -61,8 +77,8 @@ export function NewTaskDialog({ snapshot, project, onClose }: { snapshot: Snapsh
         </label>
         <div class="field-row">
           <label class="field">
-            <span class="field-label">ID <span class="field-hint">optional</span></span>
-            <input name="id" class="mono" value={id} onInput={event => setId(event.currentTarget.value)} placeholder={snapshot.nextId ?? 'ABC-123'} />
+            <span class="field-label">ID</span>
+            <input name="id" class="mono" value={id} onInput={event => { editedId.current = Boolean(event.currentTarget.value.trim()); setId(event.currentTarget.value); }} placeholder={snapshot.nextId ?? 'ABC-123'} />
           </label>
           <label class="field">
             <span class="field-label">Project <span class="field-hint">optional</span></span>

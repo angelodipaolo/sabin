@@ -22,6 +22,7 @@ const api: SabinApi = {
   initialTask: () => invoke('app:initialTask'),
   createHome: () => invoke('home:create'),
 
+  nextTaskId: project => invoke('task:nextId', project),
   createTask: input => invoke('task:create', input),
   setStatus: (id, status) => invoke('task:setStatus', id, status),
   updateTask: (id, update) => invoke('task:update', id, update),
