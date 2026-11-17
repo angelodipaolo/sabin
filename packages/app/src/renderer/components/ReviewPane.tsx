@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { MarginResult, TaskSummary, WorkspaceInfo } from '../../shared/types';
+import type { RedeResult, TaskSummary, WorkspaceInfo } from '../../shared/types';
 import { api } from '../api';
 import { useActions } from '../App';
 import { Button, Icon } from './bits';
 
 /**
- * Margin's review page, shown in the task view's main area. The page itself
+ * Rede's review page, shown in the task view's main area. The page itself
  * is a native view the main process lays over `.review-host`; this component
  * only reports where that box is, and hides the view while a dialog is open
  * (a native view always paints above the page).
@@ -13,7 +13,7 @@ import { Button, Icon } from './bits';
 export function ReviewPane({ task, workspace, onClose }: { task: TaskSummary; workspace: WorkspaceInfo; onClose(): void }) {
   const actions = useActions();
   const host = useRef<HTMLDivElement>(null);
-  const [review, setReview] = useState<MarginResult | null>(null);
+  const [review, setReview] = useState<RedeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,13 +75,13 @@ export function ReviewPane({ task, workspace, onClose }: { task: TaskSummary; wo
       </div>
       {error ? (
         <div class="empty-state review-error">
-          <h2>{/not installed/.test(error) ? 'Margin is not installed' : 'Could not open the review'}</h2>
+          <h2>{/not installed/.test(error) ? 'Rede is not installed' : 'Could not open the review'}</h2>
           <p>{error}</p>
           <Button kind="plain" onClick={onClose}>Back to Files</Button>
         </div>
       ) : (
         <div class="review-host" ref={host} data-testid="review-host">
-          {!review && <div class="review-loading">Starting Margin…</div>}
+          {!review && <div class="review-loading">Starting Rede…</div>}
         </div>
       )}
     </div>

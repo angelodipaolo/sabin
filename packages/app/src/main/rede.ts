@@ -1,18 +1,18 @@
 import { execFile } from 'child_process';
 import { BrowserWindow, WebContentsView, shell } from 'electron';
-import type { Bounds, MarginResult } from '../shared/types';
+import type { Bounds, RedeResult } from '../shared/types';
 
 /**
- * Margin is a separate tool. Sabin only runs its CLI and shows the page it
- * serves - as a top-level document in its own view, because Margin's server
+ * Rede is a separate tool. Sabin only runs its CLI and shows the page it
+ * serves - as a top-level document in its own view, because Rede's server
  * rejects cross-site framed requests.
  */
 
-export const MARGIN_INSTALL_HINT =
-  'Margin is not installed. Install it from its repository with `npm install && npm run build && npm link`, then try again.';
+export const REDE_INSTALL_HINT =
+  'Rede is not installed. Install it from its repository with `npm install && npm run build && npm link`, then try again.';
 
-/** `margin --no-open` prints a title line and the review URL */
-export function parseMarginOutput(stdout: string): MarginResult | null {
+/** `rede --no-open` prints a title line and the review URL */
+export function parseRedeOutput(stdout: string): RedeResult | null {
   const lines = stdout.split('\n').map(line => line.trim()).filter(Boolean);
   const index = lines.findIndex(line => /^http:\/\/127\.0\.0\.1:\d+\//.test(line));
   if (index === -1) return null;
@@ -21,7 +21,7 @@ export function parseMarginOutput(stdout: string): MarginResult | null {
   return { url, title };
 }
 
-/** Only Margin's own origin, on the port it reported, may load in the view */
+/** Only Rede's own origin, on the port it reported, may load in the view */
 export function isAllowedReviewUrl(url: string, port: string): boolean {
   try {
     const parsed = new URL(url);
@@ -31,40 +31,40 @@ export function isAllowedReviewUrl(url: string, port: string): boolean {
   }
 }
 
-export function findMargin(): Promise<string | null> {
+export function findRede(): Promise<string | null> {
   return new Promise(resolve => {
-    execFile('/bin/sh', ['-c', 'command -v margin'], { timeout: 3000 }, (error, stdout) => {
+    execFile('/bin/sh', ['-c', 'command -v rede'], { timeout: 3000 }, (error, stdout) => {
       resolve(error ? null : stdout.trim() || null);
     });
   });
 }
 
 /**
- * Run `margin --no-open` in a worktree and let Margin decide what to review:
+ * Run `rede --no-open` in a worktree and let Rede decide what to review:
  * uncommitted changes when there are any, else the branch against the
  * default branch.
  */
-export function runMargin(cwd: string): Promise<MarginResult> {
+export function runRede(cwd: string): Promise<RedeResult> {
   return new Promise((resolve, reject) => {
-    execFile('margin', ['--no-open'], { cwd, timeout: 30_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile('rede', ['--no-open'], { cwd, timeout: 30_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-        reject(new Error(MARGIN_INSTALL_HINT));
+        reject(new Error(REDE_INSTALL_HINT));
         return;
       }
-      const parsed = parseMarginOutput(stdout);
+      const parsed = parseRedeOutput(stdout);
       if (parsed) {
         resolve(parsed);
         return;
       }
       const detail = (stderr || stdout || (error ? error.message : '')).trim().split('\n').slice(-3).join(' ');
-      reject(new Error(detail ? `Margin could not open a review: ${detail}` : 'Margin printed no review URL.'));
+      reject(new Error(detail ? `Rede could not open a review: ${detail}` : 'Rede printed no review URL.'));
     });
   });
 }
 
 /**
  * The one review view, laid over the task view's main area. It keeps its own
- * persistent session partition: Margin keeps drafts in localStorage per
+ * persistent session partition: Rede keeps drafts in localStorage per
  * origin, and a reviewer's half-written comment must survive a restart.
  */
 export class ReviewView {
@@ -72,7 +72,7 @@ export class ReviewView {
   private port = '';
   private url = '';
   private bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
-  /** URLs margin printed this session; the renderer can only show one of these */
+  /** URLs rede printed this session; the renderer can only show one of these */
   private issued = new Set<string>();
 
   constructor(private readonly window: () => BrowserWindow | null) {}
@@ -85,7 +85,7 @@ export class ReviewView {
     if (this.view && !this.view.webContents.isDestroyed()) return this.view;
     const view = new WebContentsView({
       webPreferences: {
-        partition: 'persist:margin',
+        partition: 'persist:rede',
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true

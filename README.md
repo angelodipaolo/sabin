@@ -34,7 +34,7 @@ reads and writes the task's files, moves the task to `review` when the work is
 done and verified, and appends a handoff to `log.md` - what changed, the proof
 it works, the risks, and what is next. The work stays **uncommitted** in
 `review`, so a fresh reviewer reads the working tree. Findings go to
-[Margin](#review) threads when `margin` is installed, otherwise to `review.md`.
+[Rede](#review) threads when `rede` is installed, otherwise to `review.md`.
 
 You approve completion. That is where the commit happens, the task moves to
 `completed`, and your hook for that status runs - "push and open a PR", say.
@@ -119,8 +119,8 @@ The installed Electron runtime stays unchanged.
 
 ## Review
 
-When Margin (`margin`, a local diff review tool) is on PATH, a review pass records
-its findings as Margin threads, and the app shows Margin's review UI for a
+When Rede (`rede`, a local diff review tool) is on PATH, a review pass records
+its findings as Rede threads, and the app shows Rede's review UI for a
 worktree. Without it, findings go to `review.md` in the task directory as
 checkbox rounds. Either way, completion waits until every finding is
 addressed or declined.

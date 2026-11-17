@@ -5,7 +5,7 @@ import type { AppCommand, Snapshot } from '../shared/types';
 import { taskFromArgv } from './args';
 import { testHooks } from './testHooks';
 import { registerIpc } from './ipc';
-import { findMargin, ReviewView } from './margin';
+import { findRede, ReviewView } from './rede';
 import { Notifier } from './notify';
 import { adoptLoginShellPath } from './shellEnv';
 import { emptySnapshot, takeSnapshot } from './snapshot';
@@ -15,7 +15,7 @@ import { DEFAULT_SIZE, loadWindowState, trackWindowState } from './windowState';
 /**
  * Process layout: this main process owns every file, git and terminal call,
  * all through @sabin/core. The renderer is a sandboxed Preact page that sees
- * only the preload bridge. Margin's review page, when open, is a separate
+ * only the preload bridge. Rede's review page, when open, is a separate
  * WebContentsView with its own session.
  */
 
@@ -29,7 +29,7 @@ app.setName('Sabin');
 const home = resolveHome();
 let mainWindow: BrowserWindow | null = null;
 let pendingTask: string | null = taskFromArgv(process.argv);
-let marginAvailable = false;
+let redeAvailable = false;
 let version = 0;
 let current: Snapshot | null = null;
 let stopWatching: (() => void) | null = null;
@@ -78,8 +78,8 @@ async function refresh(): Promise<void> {
   try {
     do {
       again = false;
-      const next = await takeSnapshot(home, ++version, marginAvailable).catch(error => ({
-        ...emptySnapshot(home, version, marginAvailable),
+      const next = await takeSnapshot(home, ++version, redeAvailable).catch(error => ({
+        ...emptySnapshot(home, version, redeAvailable),
         homeExists: true,
         warnings: [`Could not read ${home}: ${error instanceof Error ? error.message : String(error)}`]
       }));
@@ -214,14 +214,14 @@ function buildMenu(): void {
 async function start(): Promise<void> {
   if (env.SABIN_APP_THEME === 'dark' || env.SABIN_APP_THEME === 'light') nativeTheme.themeSource = env.SABIN_APP_THEME;
 
-  // Nothing the renderer or Margin's page asks for (camera, notifications from the page, ...) is granted
+  // Nothing the renderer or Rede's page asks for (camera, notifications from the page, ...) is granted
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-attach-webview', event => event.preventDefault());
   });
 
   if (env.SABIN_APP_SHELL_PATH !== '0') await adoptLoginShellPath();
-  marginAvailable = Boolean(await findMargin());
+  redeAvailable = Boolean(await findRede());
 
   registerIpc({
     home,
@@ -234,8 +234,8 @@ async function start(): Promise<void> {
       return taskId;
     },
     review,
-    setMarginAvailable: available => {
-      marginAvailable = available;
+    setRedeAvailable: available => {
+      redeAvailable = available;
     }
   });
 

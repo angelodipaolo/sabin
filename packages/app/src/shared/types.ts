@@ -98,8 +98,8 @@ export interface Snapshot {
   warnings: string[];
   /** Placeholder for the new-task dialog, e.g. TASK-0013 */
   nextId: string | null;
-  /** Whether `margin` was found on the PATH */
-  marginAvailable: boolean;
+  /** Whether `rede` was found on the PATH */
+  redeAvailable: boolean;
 }
 
 /** Which tasks the sidebar selects */
@@ -122,7 +122,7 @@ export interface FileContent {
 
 export type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: string };
 
-export interface MarginResult {
+export interface RedeResult {
   url: string;
   title: string;
 }
@@ -167,7 +167,7 @@ export interface SabinApi {
   copyText(text: string): Promise<void>;
   reveal(taskId: string, workspacePath: string): Promise<Result>;
 
-  openReview(taskId: string, workspacePath: string): Promise<Result<MarginResult>>;
+  openReview(taskId: string, workspacePath: string): Promise<Result<RedeResult>>;
   showReview(url: string, bounds: Bounds): Promise<Result>;
   hideReview(): Promise<void>;
   openExternal(url: string): Promise<void>;

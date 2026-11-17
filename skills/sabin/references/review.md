@@ -9,9 +9,9 @@ normal.
 
 ## Where findings go
 
-- **`margin` on PATH** (`command -v margin`): findings are Margin threads.
-  Run `margin guide` once and follow it. Record each finding with
-  `margin comment <path>[:<line>[-<end>]] -m "<finding>"`. Margin shows the
+- **`rede` on PATH** (`command -v rede`): findings are Rede threads.
+  Run `rede guide` once and follow it. Record each finding with
+  `rede comment <path>[:<line>[-<end>]] -m "<finding>"`. Rede shows the
   threads beside the diff; the user answers there.
 - **Otherwise**: `review.md` in `taskDir`, in the format below.
 
@@ -22,7 +22,7 @@ using it.
 
 1. **Orient.** `sabin context --json`. Read `taskFile`, the plan (its success
    criteria are the bar), the end of `log.md`, and every existing finding
-   (`review.md`, or `margin threads --all`). Do not file a finding twice.
+   (`review.md`, or `rede threads --all`). Do not file a finding twice.
 2. **Read the uncommitted work**, in each workspace of the task:
 
    ```bash
@@ -70,14 +70,14 @@ using it.
 ## Addressing findings
 
 1. Read **every** open finding: all rounds of `review.md`, or
-   `margin threads --pending`.
+   `rede threads --pending`.
 2. Work them oldest first. For each: make the change, verify it (build, tests,
    lint, typecheck, behaviour), then close it:
    - `review.md`: tick it and add `*Addressed:*` with what you did.
-   - Margin: `margin reply <id> -m "<what you did>" --resolve`.
+   - Rede: `rede reply <id> -m "<what you did>" --resolve`.
    Close only what is verified.
 3. **Disagree in writing.** Leave the item open and say why in it (or in a
-   Margin reply). Once the user decides, close it: `*Declined:*` with their
+   Rede reply). Once the user decides, close it: `*Declined:*` with their
    reason, never `*Addressed:*`. An item stays open only while it is truly
    undecided - completion reads an open item as work nobody did.
 4. Do not commit and do not change the status. The exception: the task's pull

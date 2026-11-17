@@ -5,7 +5,7 @@ import type { SessionInfo, Snapshot, TaskSummary } from '../src/shared/types';
 function snapshot(tasks: TaskSummary[], unassigned: SessionInfo[] = [], version = 1): Snapshot {
   return {
     home: '/h', userHome: '/u', homeExists: true, version, takenAt: '', tasks, projects: [], repos: [], unassigned,
-    hooksSeen: true, warnings: [], nextId: null, marginAvailable: false
+    hooksSeen: true, warnings: [], nextId: null, redeAvailable: false
   };
 }
 const s = (id: string, activity: SessionInfo['activity'], since = '2026-11-16T10:00:00Z'): SessionInfo =>

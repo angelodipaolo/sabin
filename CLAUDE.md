@@ -188,12 +188,12 @@ through core, like the CLI.
 - **Task view:** title, status and project controls; `task.md`, `prompt.md`, `plan.md`, `log.md` and
   the notes in a markdown editor; *Sessions* (Focus a live one in iTerm2, Resume an ended one);
   *Workspaces* (Terminal, Review, copy path, reveal; "create worktree in <repo>").
-- **Review** runs `margin` for a worktree and shows Margin's UI in a web view. Margin stays a separate
+- **Review** runs `rede` for a worktree and shows Rede's UI in a web view. Rede stays a separate
   tool; Sabin only calls its CLI.
 - **Notifications** only when an agent starts waiting or a task enters `review`.
 - Live updates from one debounced watcher over the home, plus a re-read on window focus. No polling.
 
-**Processes.** The main process (`src/main`) does all file, git, terminal and Margin work, and all
+**Processes.** The main process (`src/main`) does all file, git, terminal and Rede work, and all
 of it through `@sabin/core`, which esbuild bundles into `main.js`. The renderer (`src/renderer`,
 Preact) is sandboxed - context isolation, no Node, a strict CSP - and talks through the typed
 `SabinApi` bridge in `src/shared/types.ts`. Pure logic the tests cover lives in `src/shared`
@@ -210,14 +210,14 @@ recursive `fs.watch` over the home (120 ms debounce, 700 ms for `state/`). Git s
 only with a snapshot, so a worktree that changes while nothing under the home does is stale until the
 window regains focus.
 
-**Margin** runs in its own `WebContentsView` with a persistent session partition, because Margin
-keeps drafts in `localStorage` per origin and refuses cross-site frames. `margin.ts` runs
-`margin --no-open` in the worktree, loads only the URL Margin printed, and sends any other link to
+**Rede** runs in its own `WebContentsView` with a persistent session partition, because Rede
+keeps drafts in `localStorage` per origin and refuses cross-site frames. `rede.ts` runs
+`rede --no-open` in the worktree, loads only the URL Rede printed, and sends any other link to
 the browser. The native view paints above the page, so it hides while a dialog is open.
 
 **Terminal** actions (`terminal.ts`) are explicit clicks: Focus, Terminal, and Resume
 (`codex resume <id>` or `claude --resume <id>` in a new tab). They are the only things the app
-spawns besides git and Margin. A Finder-launched app has a minimal PATH, so `shellEnv.ts` reads the
+spawns besides git and Rede. A Finder-launched app has a minimal PATH, so `shellEnv.ts` reads the
 login shell's PATH once at startup.
 
 **Single instance.** A second launch focuses the window. `--task <ID>` travels in the
@@ -248,7 +248,7 @@ the rule `setup` writes); never create a worktree unless asked.
 `log.md` a dated entry: *Changed*, *Proof*, *Risks*, and *Next* when work remains. It is what the app
 shows as "where it was left off" alongside the last agent message.
 
-**Review.** When `margin` is on PATH, findings are Margin threads. Otherwise they go in `review.md`
+**Review.** When `rede` is on PATH, findings are Rede threads. Otherwise they go in `review.md`
 in the task directory as append-only rounds of `- [ ]` items, closed with `*Addressed:*` or
 `*Declined:*`. Completion blocks on any open item. Nothing is committed until completion, so a
 reviewer reads the working tree.

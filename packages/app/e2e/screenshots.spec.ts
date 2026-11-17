@@ -104,7 +104,7 @@ test('light and dark, 1440x900', async () => {
   await app.close();
 });
 
-test('review in Margin', async () => {
+test('review in Rede', async () => {
   await launch('1440x900', 'light');
   await page.locator('[data-task-id="SABIN-0003"]').click();
   await page.locator('[data-workspace="api"]').getByRole('button', { name: 'Review' }).click();
@@ -143,7 +143,7 @@ test('review in Margin', async () => {
     context.drawImage(over, review.bounds.x * scale, review.bounds.y * scale, review.bounds.width * scale, review.bounds.height * scale);
     return canvas.toDataURL('image/png').split(',')[1];
   }, { base, review: capture! });
-  await fs.writeFile(path.join(out!, '12-review-margin-light-1440x900.png'), Buffer.from(composed, 'base64'));
+  await fs.writeFile(path.join(out!, '12-review-rede-light-1440x900.png'), Buffer.from(composed, 'base64'));
   await app.close();
 });
 

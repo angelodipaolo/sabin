@@ -11,7 +11,7 @@ work gets committed, so it is the one step that is awkward to undo.
 1. **Orient.** `sabin context --json`. The task should be in `review`; if it
    is not, say so and ask.
 2. **Check for open findings.** Any `- [ ]` in `review.md`, or any thread from
-   `margin threads --pending`, stops this step. Report them and ask. If the
+   `rede threads --pending`, stops this step. Report them and ask. If the
    user says to complete anyway, say in your report what was left open.
 3. **Commit, in every workspace with changes** (`workspaces` in the context).
    One commit per repo, task ID in the message. Stage explicitly - files

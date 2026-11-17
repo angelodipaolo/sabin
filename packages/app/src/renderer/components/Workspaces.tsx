@@ -97,7 +97,7 @@ function WorkspaceItem({ task, workspace, snapshot, onReview }: { task: TaskSumm
           <Icon name="terminal" size={12} />
           Terminal
         </Button>
-        <Button kind="plain" class="btn-small" onClick={onReview} title={snapshot.marginAvailable ? 'Review the diff in Margin' : 'Needs Margin on your PATH'}>
+        <Button kind="plain" class="btn-small" onClick={onReview} title={snapshot.redeAvailable ? 'Review the diff in Rede' : 'Needs Rede on your PATH'}>
           <Icon name="review" size={12} />
           Review
         </Button>

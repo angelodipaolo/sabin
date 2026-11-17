@@ -16,7 +16,7 @@ import {
 } from '@sabin/core';
 import type { Bounds, Result } from '../shared/types';
 import { createTaskFile, deletableNote, listTaskFiles, readTaskFile, renameTaskFile, writeTaskFile } from './files';
-import { ReviewView, runMargin } from './margin';
+import { ReviewView, runRede } from './rede';
 import { taskFilePath } from './paths';
 import { loadParts } from './snapshot';
 import { focusSession, openTerminal, resumeSession } from './terminal';
@@ -29,7 +29,7 @@ export interface IpcContext {
   getSnapshot(): Promise<import('../shared/types').Snapshot>;
   takeInitialTask(): string | null;
   review: ReviewView;
-  setMarginAvailable(available: boolean): void;
+  setRedeAvailable(available: boolean): void;
 }
 
 function message(error: unknown): string {
@@ -198,12 +198,12 @@ export function registerIpc(ctx: IpcContext): void {
   handle('review:open', (taskId: unknown, workspacePath: unknown) => wrap(async () => {
     const dir = await knownWorkspace(home, str(taskId, 'a task ID'), str(workspacePath, 'a path'));
     try {
-      const result = await runMargin(dir);
-      ctx.setMarginAvailable(true);
+      const result = await runRede(dir);
+      ctx.setRedeAvailable(true);
       ctx.review.allow(result.url);
       return result;
     } catch (error) {
-      if (/not installed/.test(message(error))) ctx.setMarginAvailable(false);
+      if (/not installed/.test(message(error))) ctx.setRedeAvailable(false);
       throw error;
     }
   }));

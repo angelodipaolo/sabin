@@ -85,7 +85,7 @@ export async function buildFixture(livePid = process.pid): Promise<Fixture> {
 
   const config = await readConfig(home);
   const specs: { title: string; project?: string; status: string; id?: string; body?: string }[] = [
-    { title: 'Command center desktop app', project: 'command-center', status: 'in_progress', body: '## Goal\n\nOne place to see every task and which agent needs me.\n\n## Done when\n\n- [x] Attention list\n- [ ] Review in Margin\n' },
+    { title: 'Command center desktop app', project: 'command-center', status: 'in_progress', body: '## Goal\n\nOne place to see every task and which agent needs me.\n\n## Done when\n\n- [x] Attention list\n- [ ] Review in Rede\n' },
     { title: 'Attention list grouping', project: 'command-center', status: 'review', body: 'Group tasks by what they ask of the user.\n' },
     { title: 'Invoice PDF export', project: 'billing', status: 'in_progress', body: 'Customers want a PDF next to every invoice.\n' },
     { title: 'Retry failed webhook deliveries', project: 'billing', status: 'in_progress', body: 'Exponential backoff, at most 8 attempts.\n' },
@@ -139,7 +139,7 @@ export async function buildFixture(livePid = process.pid): Promise<Fixture> {
 
   // Task files beyond task.md and prompt.md
   const taskDir = (id: string) => path.join(home, 'tasks', id);
-  await write(path.join(taskDir('SABIN-0001'), 'plan.md'), '# Plan\n\n1. Snapshot in the main process\n2. Attention list\n3. Task view with the editor\n4. Margin review in a web view\n');
+  await write(path.join(taskDir('SABIN-0001'), 'plan.md'), '# Plan\n\n1. Snapshot in the main process\n2. Attention list\n3. Task view with the editor\n4. Rede review in a web view\n');
   await write(path.join(taskDir('SABIN-0001'), 'log.md'), '# Log\n\n## 2026-11-15\n\n**Changed:** snapshot and watcher.\n**Proof:** unit tests pass.\n**Risks:** git status cost with many worktrees.\n');
   await write(path.join(taskDir('SABIN-0001'), 'research.md'), '# Research\n\nElectron WebContentsView keeps its own session partition.\n');
   await write(path.join(taskDir('SABIN-0001'), 'prompt.md'), '# SABIN-0001 - Command center desktop app\n\nScratchpad for prompts. Agents never read this file.\n\n---\n\nImplement the attention list next.\n');
@@ -202,7 +202,7 @@ export async function buildFixture(livePid = process.pid): Promise<Fixture> {
     repos: { web, api },
     worktree: (taskId, repo) => worktrees.get(`${taskId}/${repo}`)!,
     cleanup: async () => {
-      for (const dir of worktrees.values()) await run('margin', ['stop'], { cwd: dir }).catch(() => undefined);
+      for (const dir of worktrees.values()) await run('rede', ['stop'], { cwd: dir }).catch(() => undefined);
       await fs.rm(root, { recursive: true, force: true });
     }
   };
@@ -224,7 +224,7 @@ export function appEnv(fixture: Fixture, extra: Record<string, string> = {}): Re
     SABIN_APP_SHELL_PATH: '0',
     SABIN_APP_NO_VIBRANCY: '1',
     SABIN_APP_WINDOW_SIZE: '1100x720',
-    MARGIN_IDLE_TIMEOUT: '120',
+    REDE_IDLE_TIMEOUT: '120',
     ...extra
   };
 }

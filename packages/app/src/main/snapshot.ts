@@ -34,7 +34,7 @@ function message(error: unknown): string {
 }
 
 /** The empty snapshot shown before the home exists */
-export function emptySnapshot(home: string, version: number, marginAvailable: boolean): Snapshot {
+export function emptySnapshot(home: string, version: number, redeAvailable: boolean): Snapshot {
   return {
     home,
     userHome: os.homedir(),
@@ -48,7 +48,7 @@ export function emptySnapshot(home: string, version: number, marginAvailable: bo
     hooksSeen: false,
     warnings: [],
     nextId: null,
-    marginAvailable
+    redeAvailable
   };
 }
 
@@ -119,8 +119,8 @@ export async function loadParts(home: string): Promise<SnapshotParts> {
  * Git calls run concurrently: one `git worktree list` per repo, then one
  * `git status` per workspace.
  */
-export async function takeSnapshot(home: string, version: number, marginAvailable: boolean): Promise<Snapshot> {
-  if (!(await isDirectory(home))) return emptySnapshot(home, version, marginAvailable);
+export async function takeSnapshot(home: string, version: number, redeAvailable: boolean): Promise<Snapshot> {
+  if (!(await isDirectory(home))) return emptySnapshot(home, version, redeAvailable);
   const warnings: string[] = [];
 
   let config: SabinConfig;
@@ -211,6 +211,6 @@ export async function takeSnapshot(home: string, version: number, marginAvailabl
     hooksSeen: sessionFiles.some(name => name.endsWith('.json')),
     warnings,
     nextId,
-    marginAvailable
+    redeAvailable
   };
 }

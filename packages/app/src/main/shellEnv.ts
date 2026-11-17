@@ -27,7 +27,7 @@ export function mergePath(shellPath: string | null, current: string | undefined)
 /**
  * The PATH a login shell would have. An app started from Finder inherits
  * launchd's minimal PATH, which has no Homebrew, no ~/.local/bin and no npm
- * globals - so no `margin`, and maybe not the git the user expects. Asked once
+ * globals - so no `rede`, and maybe not the git the user expects. Asked once
  * at startup, with a timeout, because an interactive rc file can do anything.
  */
 export function loginShellPath(timeoutMs = 4000): Promise<string | null> {
