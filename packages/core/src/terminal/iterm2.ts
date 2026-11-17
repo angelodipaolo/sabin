@@ -70,24 +70,23 @@ end run
 /**
  * Open a tab in a named window, or a new window when that one has gone.
  *
- * The tab is also tagged with `user.sabinTicket`. The *title* cannot be
- * relied on - a zsh that writes the title on every prompt overwrites whatever
- * we set, and there is no way to stop it - but a user variable is a separate
- * channel nothing else writes to. Put `\(user.sabinTicket)` in a profile's
- * title format and the ticket sticks; leave it out and nothing is lost,
- * because attribution never depended on the title.
+ * The tab is also tagged with `user.sabinTask`. The *title* cannot be relied
+ * on - a zsh that writes the title on every prompt overwrites whatever we
+ * set - but a user variable is a separate channel nothing else writes to.
+ * Put `\(user.sabinTask)` in a profile's title format and the task sticks;
+ * leave it out and nothing is lost, because attribution never depended on
+ * the title.
  *
- * The window is the ticket: `sabin implement` and `sabin review` on the same
- * ticket land beside each other, so ⌘1-⌘9 walks one ticket's terminals
- * instead of everything you have open. The tab is created but the window is
- * not raised - the shell you typed the command in stays yours.
+ * The window is the task: a task's terminals land beside each other, so
+ * ⌘1-⌘9 walks one task's tabs. The tab is created but the window is not
+ * raised - the shell you typed the command in stays yours.
  */
 const OPEN_TAB = `
 on run argv
   set targetWindowId to item 1 of argv
   set theTitle to item 2 of argv
   set theCommand to item 3 of argv
-  set theTicket to item 4 of argv
+  set theTask to item 4 of argv
 
   tell application "iTerm2"
     set theWindow to missing value
@@ -103,7 +102,7 @@ on run argv
     if theWindow is missing value then
       set theWindow to (create window with default profile)
       tell current session of theWindow
-        if theTicket is not "" then set variable named "user.sabinTicket" to theTicket
+        if theTask is not "" then set variable named "user.sabinTask" to theTask
         if theTitle is not "" then set name to theTitle
         if theCommand is not "" then write text theCommand
       end tell
@@ -113,7 +112,7 @@ on run argv
     tell theWindow
       set newTab to (create tab with default profile)
       tell current session of newTab
-        if theTicket is not "" then set variable named "user.sabinTicket" to theTicket
+        if theTask is not "" then set variable named "user.sabinTask" to theTask
         if theTitle is not "" then set name to theTitle
         if theCommand is not "" then write text theCommand
       end tell
@@ -128,8 +127,8 @@ export class ITerm2Driver implements TerminalDriver {
 
   async isAvailable(): Promise<boolean> {
     try {
-      // Asks whether the app is running without launching it, so a `sabin
-      // sessions` on a machine with iTerm2 closed stays quiet
+      // Asks whether the app is running without launching it, so a listing
+      // on a machine with iTerm2 closed stays quiet
       const { stdout } = await execFileAsync('osascript', [
         '-e',
         'tell application "System Events" to return (exists process "iTerm2")'
@@ -184,7 +183,7 @@ export class ITerm2Driver implements TerminalDriver {
       options.newWindow ? '' : options.windowId ?? '',
       options.title ?? '',
       command,
-      options.ticket ?? ''
+      options.taskId ?? ''
     ]);
   }
 

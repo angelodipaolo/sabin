@@ -1,28 +1,25 @@
 # Implement a task
 
-Execute a task from its plan, or directly from its requirements when it has
-no plan.
+Do the work, from the plan when there is one, else from the requirements.
 
-## Getting started
+## Start
 
-1. **Orient.** `sabin context --json`. If it errors, ask which ticket.
-2. **Read the task:** `sabin task show`.
-3. **Read the notes.** Everything in `notesDir`, plan first if there is one.
-4. If the status is behind `in_progress` (`open` or `ready`):
-   `sabin task update <TICKET> in_progress`. Never write it over `review` -
-   addressing feedback is implementation work that happens *in* `review`, and
-   walking the task back would claim nobody had reviewed it.
+1. **Orient.** `sabin context --json`. If it errors, ask which task.
+2. **Check where you are.** `workspace` must not be null: code changes happen
+   in one of the task's worktrees. If it is null, stop and say so. Do not `cd`
+   and do not create a worktree unless the user asks (`sabin work <ID>`).
+3. **Read** `taskFile`, the plan, the notes, the end of `log.md` (the last
+   session's *Next*), and `review.md` if there is one.
+4. If the status is `open` or `ready`: `sabin status in_progress`. Never write
+   it over `review` - addressing findings happens *in* review.
 
 ## With a plan
 
-`plan.md` is the state of the work. Trust its checkmarks: `- [x]` is done,
-start from the first `- [ ]`. Read every file the current phase references,
-in full.
-
-For each phase: read, implement the whole phase, then verify against its
-success criteria - build, tests, typecheck, lint, and a manual check that the
-feature actually behaves. Tick the boxes as they pass. A ticked plan is the
-resume point if the session ends.
+`plan.md` is the state of the work. `- [x]` is done; start at the first
+`- [ ]`. Read every file the current phase names, in full. Implement the whole
+phase, then verify it against its success criteria - build, tests, typecheck,
+lint, and a check that the behaviour is really right. Tick the boxes as they
+pass; a ticked plan is the resume point.
 
 **When the plan and reality disagree, stop:**
 
@@ -35,33 +32,29 @@ Options:    1. ...  2. ...
 Recommend:  ...
 ```
 
-Wait for the user before continuing. Common causes: files moved since the
-plan was written, a dependency changed, the functionality already exists in
-another form.
+Wait for the user before continuing.
 
 ## Without a plan
 
-Follow the task's requirements directly. Research the code the change touches
-first, keep the change focused on the task, and verify the same way. If the
-requirements are unclear, ask rather than guess.
+Follow the requirements. Read the code the change touches first, keep the
+change focused, verify the same way. If the requirements are unclear, ask.
 
-## Along the way
+## Several repos
 
-Durable work product - findings, design decisions, saved output, research -
-goes in `notesDir`, in whatever format suits it. `sabin notes new <name>`
-scaffolds a file and prints its path.
+A task may have a worktree in more than one repo (`workspaces` in the context).
+You work in the one you are standing in. If the plan needs a change in another
+repo, say so; the user decides whether that is this session's job.
 
-## Finishing
+## Finish
 
 1. Run the full verification once more.
-2. **Do not commit.** The worktree is left dirty on purpose, so the reviewer
-   reads the actual working state rather than a diff of something already
-   sealed. `/sabin complete` makes the one commit, at the end.
-3. `sabin task update <TICKET> review` - and follow anything it prints.
-4. Tell the user, naming the next step and the fact that nothing is committed:
+2. **Do not commit.** The worktree stays dirty so the review reads the real
+   working state. `references/complete.md` makes the commit.
+3. **Write the handoff**: append an entry to `log.md` (`references/handoff.md`).
+4. `sabin status review`, and follow any hook it prints.
+5. Tell the user it is waiting on them, and that nothing is committed:
 
-   > SABIN-0002 is in review - nothing is committed yet. Run
-   > `sabin review SABIN-0002` for a fresh read, then `/sabin complete` once
-   > you are happy.
+   > TASK-0002 is in review - nothing is committed yet. The handoff is in
+   > log.md. Start a fresh session for a review, or say "complete it".
 
-You do not move a task to `completed`. That is the user's call.
+You never move a task to `completed` on your own.

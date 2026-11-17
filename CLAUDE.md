@@ -4,18 +4,28 @@ Guidance for Claude Code when working in this repository.
 
 ## Overview
 
-Sabin is a worktree command center for agentic coding: write a task, hand it to an agent in its own
-worktree, review what comes back. Three packages in a monorepo:
+Sabin is a command center for agentic coding: one place to see every task across every repo and
+worktree, and where each one was left off. It answers three problems and nothing more: agents
+produce more code than you can keep up with, more output than you can keep up with, and they run in
+parallel across projects and tasks.
 
-- **@sabin/core** - the data model and every operation on it: tasks, statuses, workspaces, git,
-  agents. Pure Node, no CLI or VS Code dependencies.
-- **@sabin/cli** - the `sabin` command. Thin: argument handling, output, process launching.
-- **sabin-vscode** - VS Code extension: the Workspace tree and the Board, both backed by core.
+**Product rule: Sabin observes and organises. It never launches an agent and never orchestrates.**
+You start agents by hand in iTerm2 (Codex mostly, Claude Code sometimes). Sabin reads what they do
+through hooks and what they changed through git. Every `plan`/`implement`/`review` launcher from
+earlier versions is gone on purpose (SABIN-0025).
 
-Plus `skills/sabin/` - the agent contract - which the repo also exposes as a Claude Code plugin
-(`.claude-plugin/`).
+Three packages in a monorepo:
 
-Everything is markdown with YAML frontmatter under a Sabin directory that lives **outside the repo**.
+- **@sabin/core** - the data model and every operation on it: home, tasks, projects, repos,
+  workspaces, agent sessions, hooks, iTerm2. Pure Node; no CLI or UI dependencies. The CLI and the
+  app are both thin layers over it.
+- **@sabin/cli** - the `sabin` command. Argument handling and output only.
+- **packages/app** - the Electron desktop app (see "App" below).
+
+Plus `skills/sabin/` - the agent contract - also exposed as a Claude Code plugin (`.claude-plugin/`).
+
+No backward compatibility with the old per-repo `.sabin` directories. They are migrated by an agent
+following `skills/sabin/references/migrate.md`.
 
 ## Build, test, lint
 
@@ -25,277 +35,229 @@ npm test
 npm run lint
 npm run typecheck
 
-npm test -w @sabin/core -- path/to/test.ts    # one file
-cd packages/vscode-extension && npm run watch  # esbuild watch mode
+npm run build -w @sabin/core && npm run build -w @sabin/cli
+npm test -w @sabin/cli -- src/__tests__/work.test.ts    # one file
 ```
 
-`sabin` on PATH is `npm link`ed to `packages/cli`, so `npm run build` updates it.
+`sabin` on PATH is `npm link`ed to `packages/cli`, so `npm run build` updates it. The CLI resolves
+`@sabin/core` through its built `dist/`, so build core before the CLI.
 
-**After changing the VS Code extension** you must package and reinstall it, then reload VS Code:
-
-```bash
-cd packages/vscode-extension && npx @vscode/vsce package && code --install-extension sabin-vscode-0.1.0.vsix
-```
+**Tests never touch the real home.** Both packages' jest `setupFiles` point `SABIN_HOME` (and, in
+the CLI, `HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`) at temp directories before any module loads. Under
+Jest, `os.homedir()` ignores a changed `HOME` - Jest hands each test a copy of `process.env` - so
+the CLI reads the user's home through `userHome()` (`cli.ts`), which reads `$HOME` first. Never call
+`os.homedir()` directly in code that writes.
 
 ## Data model
 
+One directory per machine: `$SABIN_HOME`, else `~/sabin` (`resolveHome()`). No link files, no
+per-repo init, no walking up from the cwd: every command, the app and every hook resolve to the
+same place whatever directory they run in.
+
 ```
-<sabin dir>/
+<home>/
   config.json
-  tasks/open/        status open, ready, in_progress, review
-  tasks/completed/   status completed
-  notes/<TICKET>-<slug>/          agent-readable; plan.md and feedback.md live here
-  prompts/<TICKET>-<slug>.md      human scratchpad; agent denied
-  hooks/<status>.md               printed by `task update` after that transition
-  research/
+  projects/<slug>.md          frontmatter: title, optional status (active | paused | done); body is prose
+  tasks/<ID>/
+    task.md                   frontmatter: status, title, optional project, created (YYYY-MM-DD)
+    prompt.md                 human scratchpad; agents never read it
+    plan.md                   optional; exactly one
+    log.md                    optional; session handoffs, appended
+    *.md                      anything else is a note
+  hooks/<status>.md           prose printed by `sabin status` after that transition
+  hooks/<repo>/<status>.md    per-repo override; wins when the command runs inside that repo
+  state/sessions/<id>.json    agent activity, written by agent hooks
 ```
 
-**Task**: `tasks/<dir>/<ID>.md`. The filename is the ID and the stable key. Frontmatter: `status`,
-`title`, optional `slug`, `branch`, `worktree`. Status lives in *both* the frontmatter and the
-directory, which is why every status write goes through `setTaskStatus()` in core - never through a
-direct edit. Legacy `resolved` is read as `completed`.
+**config.json**: `idPrefix`, `idPadding`, `branch: { prefix, template }`, and `repos: { <name>: {
+path, worktreesRoot?, postCreate? } }`. A missing file is defaults; an unparsable one is an error,
+never a silent fallback - a defaulted prefix would allocate IDs under the wrong name and an empty
+registry would make every workspace vanish. A repo's name is its directory basename, with `-2`,
+`-3` on a collision; `worktreesRoot` is relative to the repo unless absolute, default
+`../<basename>-worktrees`.
 
-**Workspace**: everything a ticket owns, derived from its ID plus one slug (from the title by
-default, capped at 32 chars on a word boundary, filler words dropped). The slug names the branch
-(`{prefix}/{ticket}-{slug}`), the worktree (`<repo>-worktrees/<name>`), the notes directory and the
-scratchpad. Once recorded in the task file it is fixed. Resolution order: explicit argument, recorded
-`slug`, the task title, then an existing directory on disk (as a migration fallback).
+**Task.** The directory name is the ID: `^[A-Z][A-Z0-9]*-\d+$`, uppercased on input. That pattern
+is also the path-safety check - nothing that passes it holds a separator or `..` - so it is
+validated on create **and on every lookup** (`taskDirPath()` is the one place an ID becomes a
+path). External IDs such as `ARCH-1234` are passed in; otherwise `nextTaskId()` allocates the next
+`<idPrefix>-<n>`, counting directory names so a task with a broken `task.md` still holds its number.
+Status lives in the frontmatter only; nothing moves on disk. Every status write goes through
+`setTaskStatus()`: under the lock, atomic (temp file + rename), keeping unknown keys and the body.
+A task has no repo, branch, worktree or slug field.
 
-**Plan**: exactly one per ticket, at `notesDir/plan.md`. Derived, never recorded. `findPlan()` is the
-only answer to "does this ticket have a plan".
+**Project.** Optional grouping, independent of repos. A task names one with `project: <slug>`. A
+project exists if `projects/<slug>.md` exists **or** any task names the slug.
 
-**Feedback**: exactly one per ticket, at `notesDir/feedback.md`, beside the plan. Derived, never
-recorded. `findFeedback()` is the only answer to "is there feedback". Every review pass appends a
-`## Round <n> — <source> · <date>` section of `- [ ]` findings; the implementer ticks them and adds
-`*Addressed:*`. Append-only - nothing is deleted, rewritten or un-ticked, so a second model's pass
-sits below the first's and GitHub PR comments pulled down with `gh` are just another round. The
-format lives in `skills/sabin/references/feedback.md` and nowhere else.
+**Workspace** - derived, never recorded. One git worktree, in one registered repo, whose branch name
+contains a known task ID: case-insensitive, and bounded so `ARCH-12` matches neither `ARCH-123` nor
+`XARCH-12` (`taskIdFromBranch()`, which takes the known IDs so `fix/UTF-8-handling` names nothing
+unless UTF-8 is a task). Found by one `git worktree list --porcelain` per registered repo. A task has
+zero or more, across repos. `createWorkspace()` makes branch `{prefix}/{id}-{slug}` at
+`<worktreesRoot>/<ID>-<slug>`; the slug is computed from the title (stop words dropped, 32 chars on
+a word boundary) and not stored - the branch is the record. It is idempotent: if the task already
+has a workspace in that repo, it is returned and nothing is created.
 
-**Hooks**: `hooks/<status>.md` is prose for the agent. `sabin task update X completed` prints
-`hooks/completed.md` after the move, so "push and open a PR" arrives from the command the agent had to
-run anyway. No new command, nothing for the skill to remember.
+**Agent session.** Hooks call `sabin agent-state` with their JSON payload on stdin. One file per
+agent session id. `SessionStart` → idle; `UserPromptSubmit` → busy, records the prompt;
+`PermissionRequest` (Codex) and a permission/idle `Notification` (Claude Code) → waiting;
+`PostToolUse` → busy only if currently waiting (approving a permission fires nothing else);
+`Stop` → idle, records `last_assistant_message`; `SessionEnd` → ended. **Ended sessions are kept** -
+they are the "where I left off" record - and swept at the edges of a session: older than 30 days,
+or beyond the 5 most recent per cwd. A session whose pid is dead reads as `ended`; one with no pid
+is believed for 12h. A session belongs to a task when its cwd is inside one of the task's
+workspaces.
 
-**Ticket inference**: from the branch (the project prefix first, then any `UPPER-123` key). No ticket
-on the branch is an error, not a fallback - resolving to the wrong ticket's notes is the worst failure.
-A ticket named explicitly (argument or `SABIN_TICKET`) must have a task file or `resolveWorkspace()`
-throws `UnknownTicketError`; every path is derived from the ID, so a typo would otherwise resolve
-cleanly into a directory nothing else looks in. Branch-derived tickets are exempt - `task create`
-records the branch before the task lands - and `allowMissingTask` lets `ensureWorkspace` refuse with
-its own message.
+**Hooks** (status hooks, not agent hooks) are prose for the agent. `sabin status X completed`
+prints `hooks/completed.md`, or `hooks/<repo>/completed.md` inside that repo, so "push and open a
+PR" arrives from the command the agent had to run anyway.
 
 ## Core (`packages/core/src`)
 
 | File | Owns |
 | --- | --- |
-| `types.ts` | `Task`, `TaskStatus`, `TASK_STATUSES`, `SabinConfig` |
-| `tasks.ts` | `listTasks`, `findTask`, `createTask`, `setTaskStatus`, `nextTaskId`, `readHook` - every task write, under `withLock` |
-| `markdown.ts` | `parseTask` / `writeTask` (gray-matter) |
-| `workspace.ts` | `resolveWorkspace`, `workspacePaths`, slugs, `branchNameFor`, `findPlan`, `findFeedback`, `scaffoldWorkspace` |
-| `agents.ts` | `resolveAgent`, `agentArgv`, `buildTaskPrompt`, `WorkflowStep` - pure, so an orchestrator can compose prompts without the CLI |
-| `git.ts` | `currentBranch`, `mainWorktreeRoot`, `listWorktrees`, `addWorktree` |
-| `sabinResolver.ts` | finds the Sabin directory: link file, walking up, then the main worktree root |
-| `terminal/` | `TerminalDriver`, the iTerm2 driver, and `ps`/`lsof` process reading |
-| `agentState.ts` | `state/sessions/*.json` - what each agent is doing, written by hooks |
-| `sessions.ts` | `groupSessionsByTicket`, `chooseJob`, `windowForTicket` - terminals to tickets |
-| `itermProfile.ts` | the Dynamic Profile `jump --install-hotkey` writes |
-| `lock.ts` | mkdir lock, scoped to ID allocation and status writes |
-| `config.ts` | `readConfig` - a missing file is defaults; an unparsable one is an error |
-| `codeWorkspace.ts`, `agentPermissions.ts`, `gitExclude.ts` | the files `init`/`link` write |
+| `home.ts` | `resolveHome`, `homePaths`, `ensureHome` |
+| `config.ts` | `readConfig`/`writeConfig`, the repo registry: `listRepos`, `findRepo`, `repoForPath`, `addRepo`, `removeRepo` |
+| `ids.ts` | `parseTaskId`, `TASK_ID_PATTERN`, `compareTaskIds`, `taskIdFromBranch` |
+| `taskFiles.ts` | paths inside a task directory; `findPlan`, `findLog`, `listNotes` |
+| `tasks.ts` | `listTasks`, `findTask`/`getTask`, `createTask`, `setTaskStatus`, `updateTask`, `nextTaskId` |
+| `projects.ts` | `listProjects`, `findProject`, `createProject` |
+| `hooks.ts` | `hookPath`, `findHook` (text and file), `readHook` |
+| `git.ts` | `listWorktrees`, `mainWorktreeRoot`, `currentBranch`, `addWorktree` |
+| `workspaces.ts` | `listWorkspaces`, `workspacesForTask`, `workspaceForPath`, `createWorkspace`, `workspaceGitStatus` |
+| `agentSessions.ts` | `recordAgentEvent` (never throws, never prints), `readAgentSessions`, `sweepAgentSessions`, `sessionsByTask` |
+| `agentIntegration.ts` | merges the prompt deny rule and activity hooks into settings files whose paths the caller chooses |
+| `terminal/` | the iTerm2 driver and the `ps`/`lsof` process reader |
+| `terminalSessions.ts` | live terminals attributed to tasks by cwd; `focusTerminal`, `openWorkspaceTab`, `windowForTask` |
+| `lock.ts` | mkdir lock over the home: ID allocation, `task.md` writes, `config.json` edits |
+| `markdown.ts`, `slug.ts`, `fs.ts`, `errors.ts` | frontmatter, slugs, atomic writes, `SabinError` subclasses with stable `code`s |
+
+Listing is tolerant (one broken `task.md` never blanks the list); a lookup of a bad ID throws
+`InvalidTaskIdError`, so a typo and a missing task are different answers.
 
 ## CLI (`packages/cli/src`)
 
-`index.ts` is the Commander definition; one file per command under `commands/`.
-`workspace-context.ts` (`loadProject`, `getWorkspace`, `fail`) and `workspace-start.ts`
-(`ensureWorkspace`, shared by the three step verbs) are the only shared pieces. `iterm.ts` titles
-tabs and opens new ones - the title only; the iTerm2 badge was removed in SABIN-0016 because it
-painted the ticket over the output.
+`index.ts` is only a router: `agent-state` takes a fast path that loads neither Commander nor any
+other command, and everything else goes to `program.ts`, the Commander definition. One file per
+command under `commands/`. `cli.ts` holds the shared pieces: `CliError`/`fail()`, `loadHome()`,
+`resolveTaskId()` (the ID given, else the task whose worktree holds the cwd - never a guess),
+`userHome()`, and the output helpers.
 
 | Command | Does |
 | --- | --- |
-| `init` / `link` | Sabin directory outside the repo, `.sabin` link, `.git/info/exclude`, `.code-workspace`, prompts deny rule; `--hooks` also installs the activity hooks |
-| `agent-state <activity>` | hidden; what the activity hooks call. Never fails, never prints |
-| `task create "<title>"` | task + notes dir + scratchpad; `-n` for external IDs, `--open` to edit, `--json` |
-| `task list` | one line per active task; `--all`, `-s`, `--json` |
-| `task update <id> <status>` | the status write; prints the hook |
-| `task show` | print the file |
-| `plan` / `implement` / `review` `[ticket]` | the three step verbs - see below |
-| `sessions [ticket]` | live terminals, grouped by the ticket whose worktree they sit in; `--all`, `--json` |
-| `jump [ticket]` | focus a ticket's terminal, or pick one; `--any` for callers with no terminal to ask in (exits 3 when there is nothing to focus); `--install-hotkey` binds a global picker |
-| `term [ticket]` | a shell in the ticket's worktree, in the ticket's window |
-| `open` | the `.code-workspace`, or `--notes/--prompt/--plan/--feedback/--task/--worktree/--sabin` (notes and prompt are scaffolded on the way) |
-| `context --json` | the agent's orienting call; deliberately omits the prompt file |
-| `where` | one path for shell interpolation; `--plan` and `--feedback` among them |
-| `notes new` | scaffold a note, print the path; `--template plan\|feedback`; the only notes command on purpose |
-| `skill install` | copy `skills/sabin/` to `~/.claude/skills` (or `--agent codex`), removing stale `/sabin-*` commands |
+| `setup [--hooks]` | Creates the home and config; installs the skill for Claude Code (`$CLAUDE_CONFIG_DIR` or `~/.claude`, `/skills/sabin`) and Codex (`~/.agents/skills/sabin`); writes the `prompt.md` deny rule to Claude Code's `settings.json`; removes what the old installer left (`commands/sabin-*.md`, `$CODEX_HOME/skills/sabin`). `--hooks` merges activity hooks into Claude Code's `settings.json` and `$CODEX_HOME/hooks.json`. |
+| `new "<title>" [--id] [-p <project>] [-c <body>] [--json]` | Creates the task directory, `task.md` and `prompt.md`. Never a worktree. |
+| `work [id] [-r <repo>] [--json]` | Creates the task's worktree in the repo of the cwd (registering it on first use) or `--repo`; runs `postCreate`. |
+| `ls [-p <project>] [-s <status>] [-a] [--json]` | Every task: id, status, project, title, repos with a workspace, the most urgent live agent. Completed hidden unless `--all`. |
+| `status [id] <status>` | The status write; prints the hook (per-repo first). |
+| `context [id] [--json]` | The agent's orienting call. Keys: `id, title, status, project, home, taskDir, taskFile, plan, log, notes, workspaces, workspace`. Never `prompt.md`. |
+| `repo add [path]` / `repo ls` / `repo rm <name>` | The registry. `rm` touches nothing on disk. |
+| `app [-t <id>]` | `open -a` an installed `Sabin.app` (`/Applications`, then `~/Applications`), else the dev launcher `packages/app/bin/sabin-app.js` with node, detached. |
+| `agent-state` | Hidden; what the hooks run. |
 
-There is deliberately no `finish`, no worktree removal, no task deletion, and no `complete` verb in
-the CLI. Completion needs the user's approval and goes through `task update`.
+Rules every command follows:
 
-**The step verbs** (`commands/agent-step.ts`) are one `runStep(step, ticket, options)` registered
-three times from one option set in `index.ts`, so they cannot drift apart. Only the prompt differs.
-They replaced `start` and `run` in SABIN-0016 - those two names were the reported confusion, and
-anything either did is now a verb plus a flag (`--no-launch` is `start`).
+- **Each command ends by printing the resulting state** in a few plain lines - what was created,
+  where, and what to run next - so nobody wonders what happened.
+- **Errors are one line on stderr and exit 1.** Commands `throw`; `program.ts` prints. Core's
+  `SabinError` messages are written for people, so they pass through unchanged.
+- **`agent-state` prints nothing and always exits 0**, even on garbage input: Codex rejects plain
+  text on `Stop`, and a failing hook interrupts the agent it watches. It ignores its arguments, so
+  hooks written by the old `sabin init --hooks` (`sabin agent-state busy`) still work. It costs about
+  40ms per event, most of it the process-tree walk that finds the agent's pid.
+- **Setup is idempotent and conservative.** It prints every file it created, updated, left
+  unchanged or removed. A skill copy is replaced only when its contents differ. A settings file that
+  does not parse is reported and left alone (exit 1), never overwritten.
+- **Codex skips new or changed hooks until the user trusts them** in Codex's `/hooks`; `setup
+  --hooks` says so.
 
-Two rules govern worktrees, and they are the whole model:
+Removed in SABIN-0025, deliberately: `init`, `link`, `plan`, `implement`, `review`, `term`, `jump`,
+`sessions`, `open`, `where`, `notes new`, `task *`, `skill install` (folded into `setup`), and all
+agent launching.
 
-- `task create` never makes one. A task is a draft you edit until the idea is whole.
-- `plan`, `implement` and `review` always make one, and launch the agent inside it.
+## App (`packages/app`, Electron)
 
-There is no `--no-worktree`: it would be a hole in the only rule here worth having, and the thing it
-would be for is what drafting already is. Status is per-step - only `implement` writes
-`in_progress`, since planning precedes `ready` and reviewing follows it (`STATUS_FOR_STEP`).
+Files are the truth; the app holds no state of its own beyond window layout. It reads and writes
+through core, like the CLI.
 
-Under iTerm2 a new tab is the default (`--here` opts out). Autonomy is not: `--yolo` or
-`agents.autonomous` in config.json, with `--supervised` to override. The tab re-invocation has to
-forward the step, the agent and the autonomy choice, or the child opens a tab of its own.
+- **Sidebar:** All tasks, each project with open-task counts, "No project", and the repo list with
+  add/remove.
+- **Home is an attention list**, not a board, filtered by the selected project: *Needs you* (an agent
+  waiting, longest wait first; then tasks in `review`), *Working*, *In progress*, *Ready*, *Open*,
+  *Completed* (folded). A row shows the ID, title, project, a chip per workspace (repo, dirty/ahead),
+  the agent badge, and one line of the agent's last message.
+- **Task view:** title, status and project controls; `task.md`, `prompt.md`, `plan.md`, `log.md` and
+  the notes in a markdown editor; *Sessions* (Focus a live one in iTerm2, Resume an ended one);
+  *Workspaces* (Terminal, Review, copy path, reveal; "create worktree in <repo>").
+- **Review** runs `margin` for a worktree and shows Margin's UI in a web view. Margin stays a separate
+  tool; Sabin only calls its CLI.
+- **Notifications** only when an agent starts waiting or a task enters `review`.
+- Live updates from one debounced watcher over the home, plus a re-read on window focus. No polling.
 
-## Terminal sessions
+**Processes.** The main process (`src/main`) does all file, git, terminal and Margin work, and all
+of it through `@sabin/core`, which esbuild bundles into `main.js`. The renderer (`src/renderer`,
+Preact) is sandboxed - context isolation, no Node, a strict CSP - and talks through the typed
+`SabinApi` bridge in `src/shared/types.ts`. Pure logic the tests cover lives in `src/shared`
+(`attention.ts` for grouping and order, `notices.ts` for the snapshot diff behind notifications).
 
-A ticket owns its live terminals the way it owns its plan: **derived, never recorded**. A session
-belongs to SABIN-0017 because its working directory is inside SABIN-0017's worktree - so a tab you
-opened by hand and `cd`'d into counts exactly as much as one Sabin launched, and there is no
-registry to go stale when you close a tab.
+**The renderer never sends a path.** It sends a task ID and a file name; `paths.ts` validates both
+and checks the real path against the home, so a symlink cannot lead out. A workspace path is accepted
+only if git lists it for that task. `task.md` and `prompt.md` can be neither renamed nor deleted;
+deletes go to the Trash.
 
-Three subprocesses per pass, whatever the session count:
+**One snapshot, pushed.** `snapshot.ts` assembles tasks, projects, repos, workspaces with git state,
+and sessions in one pass, and turns each partial failure into a visible warning. `watcher.ts` is one
+recursive `fs.watch` over the home (120 ms debounce, 700 ms for `state/`). Git state is refreshed
+only with a snapshot, so a worktree that changes while nothing under the home does is stale until the
+window regains focus.
 
-1. `osascript` - three bulk Apple Events for the window/tab/session tree with each session's `tty`.
-   Reading `variable named "path"` per session instead is 7x slower and, for Claude Code, wrong:
-   it rewrites its process title, so `jobName` reads `2.1.246`.
-2. `ps -eo tty=,pid=,pgid=,stat=,command=` - the foreground process group per tty.
-3. `lsof -a -d cwd -Fn -p <pids>` - the working directory per pid.
+**Margin** runs in its own `WebContentsView` with a persistent session partition, because Margin
+keeps drafts in `localStorage` per origin and refuses cross-site frames. `margin.ts` runs
+`margin --no-open` in the worktree, loads only the URL Margin printed, and sends any other link to
+the browser. The native view paints above the page, so it hides while a dialog is open.
 
-Both go through `capture()`, which keeps stdout regardless of exit code: `lsof` exits non-zero when
-any pid in its list has already gone, and one transient `grep` must not empty the whole listing.
+**Terminal** actions (`terminal.ts`) are explicit clicks: Focus, Terminal, and Resume
+(`codex resume <id>` or `claude --resume <id>` in a new tab). They are the only things the app
+spawns besides git and Margin. A Finder-launched app has a minimal PATH, so `shellEnv.ts` reads the
+login shell's PATH once at startup.
 
-`chooseJob()` picks the process a session is *about*: prefer a member of the group that matches a
-configured agent, else the group leader. Neither leader nor deepest-child works alone - `sabin
-implement` is a launcher that parents the agent, while Claude Code parents its own mcpbridge.
+**Single instance.** A second launch focuses the window. `--task <ID>` travels in the
+single-instance lock's additional data, because Chromium reorders a second launch's arguments.
 
-**Agent activity** is the one thing the working directory cannot tell you: whether the Claude Code
-in that tab is mid-edit, waiting for permission, or finished twenty minutes ago. Hooks report it -
-`UserPromptSubmit` → busy, `Notification` → waiting, `Stop` → idle, `SessionEnd` → gone - each
-firing `sabin agent-state`, which writes one small file keyed by terminal session and **always exits
-0**: a hook that fails is a hook that interrupts the agent it exists to watch.
+```bash
+npm run dev -w @sabin/app                 # uses the real home unless SABIN_HOME is set
+node packages/app/bin/sabin-app.js        # the built app; what `sabin app` runs
+npm run package -w @sabin/app             # unsigned packages/app/release/mac-arm64/Sabin.app
+npm run test:e2e -w @sabin/app            # Playwright against a fixture home
+```
 
-State carries the agent's **pid**, found by walking the hook's own process tree to the nearest
-agent ancestor - a hook's parent is a transient shell, so its ppid would look dead immediately. That
-is what lets a killed agent's last "busy" be disbelieved by anyone holding the file, including the
-extension, which cannot enumerate terminals. A state with no pid falls back to a 12h expiry rather
-than being trusted for ever.
-
-Filtering on read is not enough on its own, because **a dying process writes no file** and the
-extension's watcher only hears about files. Two things close that: the launcher clears its child's
-state from its own `exit` handler, and the extension re-reads when its window regains focus
-(`onDidChangeWindowState`) - event-driven, no timer.
-
-Opt-in, via `sabin init --hooks`, and merged into `.claude/settings.local.json` rather than written
-over it. Not part of plain `init`: hooks execute a command on every turn of every agent, which is a
-heavier thing to put in someone's project than a deny rule. No activity is **not** a state - an
-agent with no hooks installed gets no badge rather than a guessed one. State whose session is no
-longer open is ignored on read and swept on the next `sabin sessions`.
-
-**One window per ticket.** `windowForTicket()` derives it from where the ticket's sessions already
-are, and only reuses a window the ticket has **to itself** - otherwise, on a machine that already
-has one window holding everything, every ticket's "own" window is that window and the flat tab bar
-survives for ever. Refusing a shared window means each ticket moves out on its next tab, so the
-layout migrates incrementally. `implement`, `review` and `term` then land beside each other and
-⌘1-⌘9 walks one ticket. Tabs are
-titled `SABIN-0017 · claude` and tagged with a `user.sabinTicket` variable - the title is
-best-effort, because a shell that writes the title on every prompt will overwrite it, but nothing
-depends on the title: attribution is always the working directory.
-
-## VS Code extension (`packages/vscode-extension/src`)
-
-**An index and a detail, never both.** The sidebar holds two views contributed to the same container
-with complementary `when` clauses on one context key, `sabin.detail` (`navigation.ts`) - so exactly
-one exists at a time and there is no third state. SABIN-0022 replaced the old side-by-side Workspace
-tree and Board, which split the vertical space and each rendered the same task list a different way.
-
-- `providers/indexProvider.ts` + `media/board.js` - the index: every uncompleted task, grouped by
-  status, completed folded away. The card is **one** click target and posts `open`; the small buttons
-  on it carry their own `data-action`, and the delegated listener resolves to the nearest one, so
-  they never stop propagation. The page posts `{command, ticket}`; paths are resolved
-  extension-side, never trusted from the page. HTML is escaped.
-- `providers/detailProvider.ts` - one ticket: scratchpad, task file, live agents, notes. A
-  `createTreeView` rather than a bare data provider, because the ticket is the view's **title** and
-  `F2` needs `.selection`. `load()` runs outside `getChildren` so the title and the title-bar buttons
-  stay right while the view is hidden.
-- `navigation.ts` - `Navigator`. `showDetail` flips the context key **before** focusing the view:
-  `.focus` on a `when`-hidden view is a silent no-op.
-- `services/workspaceService.ts` - the only door to Sabin data; everything goes through core.
-- `services/workspaceFolders.ts` - swaps folders 1+ to the open ticket's worktree and notes. Folder 0
-  is never touched (VS Code restarts the extension host), so this needs the `.code-workspace`.
-- `watchers/fileWatcher.ts` - one debounced watcher over the whole Sabin directory. `state/` gets a
-  longer debounce: agent activity changes several times a turn, on every agent at once.
-
-**No focus, no pin, no branch-following.** Removed in SABIN-0022 as circular: in a Sabin
-`.code-workspace` window folder 0 is the main clone (always `main`) and folders 1+ are the worktree
-`focusFolders()` swapped in *when the user clicked a task*, so the branch only ever matched a ticket
-that had already been selected. Which ticket you are on is now simply which detail view you
-navigated to.
-
-**Notes are files, and behave like files.** Rename, Delete, Reveal in Explorer and Copy Path on
-right-click, `F2` and ⌘⌫ on the selection, all through `vscode.workspace.fs` so editors follow a
-rename and a delete lands in the Trash. `validateNoteName` (`services/noteFiles.ts`) refuses a
-collision while you are still typing. The scratchpad and the task file carry their own context values
-(`sabinPrompt`, `sabinTaskFile`) and get neither rename nor delete: **both paths are derived from the
-ticket**, so moving one would leave every other reader looking somewhere else. Before SABIN-0022 all
-three shared `sabinNote`.
-
-- **The extension never enumerates terminals.** It reads `state/sessions/*.json` through the watcher
-  it already has - no polling, no `osascript`, no timer. The cost is that it lists agents, not
-  shells; the complete list is `sabin sessions` and the picker. `sabin.gotoAgent` (`sabin jump`) and
-  `sabin.openTerminal` (`sabin term`) are the only things that spawn anything, and the line is a
-  capability one: **`jump` and `term`, never `plan`, `implement` or `review`.** SABIN-0016 refused to
-  let the extension launch agents; navigating to a terminal that already exists is a different act.
-  They were one button until SABIN-0022, where `jump` fell through to `term` on exit 3 - which meant
-  "give me a shell in the worktree" was not a thing you could ask for. Now `gotoAgent` reports that
-  there is no agent and offers the shell.
-
-Commands: `gotoTask` (⌥⌘T - the picker matches ID, title, slug, branch and status), `showIndex`,
-`openPrompt` (⌥⌘P), `openPlan` (⌥⌘L), `openTask`, `openWorktree`, `setStatus`, `gotoAgent`,
-`openTerminal`, `newTask`, `newNote`, `renameNote` (F2), `deleteNote` (⌘⌫), `revealNote`,
-`copyTicket`, `copyPath`, `refreshTasks`, `openProjectWorkspace`. `sabin open` reaches a running
-window through the URI `vscode://angelodipaolo.sabin-vscode/focus?ticket=…`; that path is the CLI's
-(`commands/open.ts`) and stays `/focus` whatever the commands behind it are called.
+The e2e suite sets `SABIN_APP_NO_TERMINAL=1`, which swaps the iTerm2 driver for a recording fake.
+Nothing in the tests sends Apple Events.
 
 ## Agent integration
 
-`skills/sabin/SKILL.md` is lean and routes; the long-form workflow is in `skills/sabin/references/`
-(`task-create`, `plan`, `implement`, `review`, `address-feedback`, `complete`, plus `feedback` for the
-file format) and loads only when that step is requested. Rules the skill enforces: orient with
-`sabin context --json` and stop if it errors; everything durable goes in `notesDir`; status only via
-`sabin task update`; `review` is the agent's ceiling and `completed` needs explicit approval; never
-read the prompts directory (also enforced by a `permissions.deny` rule `init` writes to
-`.claude/settings.local.json`).
+`skills/sabin/SKILL.md` is lean and routes; each step lives in `skills/sabin/references/`
+(`task-create`, `plan`, `implement`, `review`, `handoff`, `complete`, `migrate`) and loads only when
+asked for. `sabin setup` installs the same files for Claude Code and Codex.
 
-**Feedback (SABIN-0020).** One `feedback.md` per ticket, beside `plan.md`, derived by `findFeedback()`
-and surfaced the same ways `plan` is (`context --json`, `where --feedback`, `open --feedback`,
-`notes new --template feedback`). Review passes append rounds to it and never edit an earlier one; the
-implementer ticks `- [x]` and adds either `*Addressed:*` (what was done) or `*Declined:*` (the
-user's call not to do it) - an item stays open only while it is genuinely undecided, since
-`complete` reads an open box as work nobody did. The format lives only in `references/feedback.md` -
-the template in `notes.ts` is a title and a pointer, so there is no second copy to drift. Nothing is
-committed until `/sabin complete`: `implement` and `address feedback` deliberately leave the worktree
-dirty so a reviewer reads the working state, and `complete` blocks on any open `- [ ]`. The one
-exception is a ticket whose PR is already open - past completion the branch is public, so rounds
-pulled from that PR commit and push normally. No step verb moves a task backwards either
-(`stepStatus` in `workspace-start.ts`), so `implement` on a ticket in `review` leaves it there. What happens
-after completion is the hook's to say (`hooks/completed.md`), never the skill's.
+Rules the skill enforces: orient with `sabin context --json` and stop if it errors; durable output
+in `taskDir`, one `plan.md`; status only through `sabin status`, `review` is the agent's ceiling and
+`completed` needs explicit approval; follow the printed hook; never read `prompt.md` (also denied by
+the rule `setup` writes); never create a worktree unless asked.
 
-`buildTaskPrompt()` is an address, not a procedure - three lines naming the step, the ticket and the
-task file, and nothing else. How to do a step lives in `references/<step>.md`, which loads on demand
-and can be edited without a release; anything restated in the prompt would be a second copy free to
-drift. It passes the task **path**, not the task body: the file is the source of truth and can change
-mid-session. The agent's cwd is the ticket's worktree, so its `sabin context --json` needs no
-arguments.
+**Handoff.** When a task goes to `review`, and whenever the user asks, the agent appends to
+`log.md` a dated entry: *Changed*, *Proof*, *Risks*, and *Next* when work remains. It is what the app
+shows as "where it was left off" alongside the last agent message.
 
-The skill stops rather than coping when a step is asked for outside the ticket's worktree - it never
-`cd`s and never creates one. Orchestration (SABIN-0014) is intentionally not built; the seams for it
-are `references/`, `buildTaskPrompt`, and `<step> --print`.
+**Review.** When `margin` is on PATH, findings are Margin threads. Otherwise they go in `review.md`
+in the task directory as append-only rounds of `- [ ]` items, closed with `*Addressed:*` or
+`*Declined:*`. Completion blocks on any open item. Nothing is committed until completion, so a
+reviewer reads the working tree.
 
 ## This repository's own Sabin
 
-`.sabin` here is a link to `~/notes/sabin/.sabin`. Use `sabin context --json` / `sabin where` for
-paths; never hardcode them. Include the ticket ID in commit messages. Run lint and tests before
-finishing.
+This repo's tasks live in the global home with every other repo's, under the project `sabin`
+(migrated from `~/notes/sabin/.sabin` on 2026-11-16; that directory and the `.sabin` link file at the
+repo root are leftovers the new CLI ignores). Use `sabin context --json` for paths and never hardcode
+them.
+
+Include the task ID in commit messages. Run lint and tests before finishing.

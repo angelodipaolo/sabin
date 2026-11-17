@@ -2,84 +2,62 @@ export const TASK_STATUSES = ['open', 'ready', 'in_progress', 'review', 'complet
 
 export type TaskStatus = typeof TASK_STATUSES[number];
 
-export function isTaskStatus(value: string): value is TaskStatus {
-  return (TASK_STATUSES as readonly string[]).includes(value);
+export function isTaskStatus(value: unknown): value is TaskStatus {
+  return typeof value === 'string' && (TASK_STATUSES as readonly string[]).includes(value);
 }
 
 export interface Task {
-  /** Ticket ID, e.g. SABIN-0004 - always the file's basename */
+  /** Validated, uppercase ID, e.g. SABIN-0025 - always the directory name */
   id: string;
   status: TaskStatus;
   title: string;
-  /** Descriptive suffix used for branch, notes and worktree names */
-  slug?: string;
-  branch?: string;
-  worktree?: string;
+  /** Project slug, when the task belongs to one */
+  project?: string;
+  /** ISO date (YYYY-MM-DD) the task was created */
+  created?: string;
+  /** Markdown body of task.md, below the frontmatter */
   content: string;
-  path: string;
+  /** tasks/<ID> */
+  dir: string;
+  /** tasks/<ID>/task.md */
+  file: string;
+  /** tasks/<ID>/prompt.md - the human scratchpad, never shown to agents */
+  promptFile: string;
 }
 
+export const PROJECT_STATUSES = ['active', 'paused', 'done'] as const;
+
+export type ProjectStatus = typeof PROJECT_STATUSES[number];
+
 export interface BranchConfig {
-  /** Personal prefix applied to generated branch names, e.g. "angelo" */
+  /** Personal prefix for generated branch names, e.g. "angelo" */
   prefix?: string;
-  /** Supports {prefix}, {ticket} and {slug} */
+  /** Supports {prefix}, {id} and {slug}. Default `{prefix}/{id}-{slug}`. */
   template?: string;
 }
 
-export interface WorktreeConfig {
-  /** Where worktrees are created, relative to the main clone */
-  root?: string;
+/** A repo as written in config.json */
+export interface RepoConfig {
+  /** Absolute path of the main clone */
+  path: string;
+  /** Relative to `path` unless absolute. Default `../<basename>-worktrees`. */
+  worktreesRoot?: string;
   /** Shell commands run inside a freshly created worktree */
   postCreate?: string[];
 }
 
-export interface SlugConfig {
-  /** Derive the suffix from the task title, or leave tickets bare */
-  from?: 'title' | 'none';
-  /** Cap on the derived suffix. Truncation lands on a word boundary. */
-  maxLength?: number;
-  /** Drop filler words ("for", "the", "per") before truncating */
-  stopWords?: boolean;
-}
-
-export interface AgentDefinition {
-  /** Executable to spawn, e.g. "codex" */
-  command: string;
-  /** Argv template. Supports {prompt}, {ticket}, {notesDir}, {worktree}, {taskFile}. */
-  args?: string[];
-  /**
-   * Flags that let the agent work without asking permission, prepended when
-   * autonomy is on. Kept apart from `args` so a project can retune one
-   * without restating the other.
-   */
-  autonomousArgs?: string[];
-  /** Extra environment for the agent process */
-  env?: Record<string, string>;
-}
-
-export interface AgentsConfig {
-  /** Agent launched when --agent is not given */
-  default?: string;
-  /**
-   * Launch agents with permission checks bypassed. Off unless asked for -
-   * `--yolo` turns it on for one run, this makes it the standing default.
-   */
-  autonomous?: boolean;
-  /** Named agents, layered over the built-ins */
-  definitions?: Record<string, AgentDefinition>;
-}
-
 export interface SabinConfig {
-  projectPrefix: string;
-  taskNumberPadding: number;
-  branch?: BranchConfig;
-  worktrees?: WorktreeConfig;
-  slug?: SlugConfig;
-  agents?: AgentsConfig;
-  /** Editor command for `sabin open` (default: code) */
-  editor?: string;
-  /** Relative to the resolved .sabin directory */
-  notesDir?: string;
-  /** Relative to the resolved .sabin directory */
-  promptsDir?: string;
+  idPrefix: string;
+  idPadding: number;
+  branch: BranchConfig;
+  /** Keyed by repo name */
+  repos: Record<string, RepoConfig>;
+}
+
+/** A registered repo with every default applied and every path absolute */
+export interface Repo {
+  name: string;
+  path: string;
+  worktreesRoot: string;
+  postCreate: string[];
 }

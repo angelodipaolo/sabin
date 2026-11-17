@@ -2,49 +2,38 @@
 
 Close out work the user has approved.
 
-**This runs only on explicit approval**: `/sabin complete`, `/sabin done`,
-"mark it complete", "ship it", "merge it". Anything less - "looks like it's
-done", "I think we're finished" - is a prompt to **ask**, not to close.
-Completion is where the work gets committed and the task file moves between
-directories, so it is the one step that is awkward to undo.
+**Only on explicit approval**: "complete it", "ship it", "mark it done",
+"merge it". "Looks done" is a reason to ask, not to close. This is where the
+work gets committed, so it is the one step that is awkward to undo.
 
 ## Steps
 
 1. **Orient.** `sabin context --json`. The task should be in `review`; if it
-   is not, say so and ask before going on.
-2. **Read `feedback.md` if there is one.** Any open `- [ ]` item stops this
-   step: report the open items and ask, rather than closing over feedback that
-   was never addressed. If the user says to complete anyway, say in the report
-   what was left open.
-3. **Commit the work** - one commit, ticket ID in the message. This is the
-   only commit in the workflow: `implement` and `address feedback` deliberately
-   leave the worktree dirty so a reviewer reads the working state.
-
-   **Stage explicitly**, and look before you do:
+   is not, say so and ask.
+2. **Check for open findings.** Any `- [ ]` in `review.md`, or any thread from
+   `margin threads --pending`, stops this step. Report them and ask. If the
+   user says to complete anyway, say in your report what was left open.
+3. **Commit, in every workspace with changes** (`workspaces` in the context).
+   One commit per repo, task ID in the message. Stage explicitly - files
+   created during the work are untracked, and `git commit -am` would leave
+   them out:
 
    ```bash
    git status --porcelain
-   git add -A          # or file by file, if some of the tree is not this ticket's
-   git commit -m "<TICKET>: ..."
+   git add -A          # or file by file, if some of the tree is not this task's
+   git commit -m "<ID>: <summary>"
    ```
 
-   Nothing was committed earlier in this workflow, so files created during the
-   work are still untracked and are the normal case here - `git commit -am`
-   would silently leave every one of them out.
-4. **Mark it complete:**
+4. **Mark it complete**, from inside a workspace so the repo's own hook
+   applies:
 
    ```bash
-   sabin task update <TICKET> completed
+   sabin status completed
    ```
 
-   This moves the file to `tasks/completed/` and prints the project's
-   completion instructions if it has any (`hooks/completed.md`).
-5. **Follow the hook, and do only what it says.** A project with no
-   `completed.md` is finished at the commit. Pushing the branch, opening a pull
-   request, notifying anyone - none of that happens unless a hook asked for it.
-6. If the Sabin directory is tracked in this repo (it usually is not), commit
-   the moved task file too, with the ticket ID in the message.
-7. **Leave the worktree and the notes in place.** The notes are the record of
-   how the work was done; the worktree is the user's to remove.
-8. Report what happened: the commit, the status change, and whatever the hook
-   had you do.
+5. **Follow the hook, and only the hook.** Pushing, opening a pull request,
+   notifying anyone: none of it happens unless the printed hook says so. No
+   hook means the work is finished at the commit.
+6. **Leave the worktrees and the task directory alone.** The worktrees are the
+   user's to remove; the task directory is the record.
+7. Report the commits, the status change, and what the hook had you do.

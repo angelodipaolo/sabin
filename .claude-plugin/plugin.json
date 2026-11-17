@@ -1,11 +1,17 @@
 {
   "name": "sabin",
   "version": "0.1.0",
-  "description": "File-based workflow management for agentic coding",
+  "description": "Tasks, worktrees and agent activity across every repo: the skill agents follow on a Sabin task",
   "author": {
     "name": "Angelo"
   },
   "homepage": "https://github.com/yourusername/sabin",
   "license": "MIT",
-  "keywords": ["workflow", "task-management", "agentic", "coding"]
+  "keywords": [
+    "workflow",
+    "task-management",
+    "agentic",
+    "coding",
+    "worktrees"
+  ]
 }

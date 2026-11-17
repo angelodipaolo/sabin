@@ -7,12 +7,8 @@ export { ITerm2Driver } from './iterm2';
 
 /**
  * What every caller gets when there is no terminal to talk to: an empty list,
- * not an error.
- *
- * Sabin works in a plain shell, over SSH, and inside VS Code's terminal.
- * Terminal awareness is a convenience layered on top, so its absence has to
- * read as "no sessions" everywhere - the moment it throws, `sabin sessions`
- * becomes a command that fails on half the machines it runs on.
+ * not an error. Terminal awareness is a convenience layered on top, so its
+ * absence has to read as "no sessions" everywhere.
  */
 export const NULL_DRIVER: TerminalDriver = {
   name: 'none',
@@ -23,10 +19,9 @@ export const NULL_DRIVER: TerminalDriver = {
 };
 
 /**
- * The driver for the terminal in use, or the null driver.
- *
- * Only iTerm2 today. A second driver (tmux, WezTerm) is a new file plus a
- * branch here - which is the reason `TerminalDriver` exists at all.
+ * The driver for the terminal in use, or the null driver. Only iTerm2.
+ * Asks System Events whether iTerm2 is running unless `TERM_PROGRAM` already
+ * says so - one osascript call, never an Apple Event to iTerm2 itself.
  */
 export async function resolveDriver(env: NodeJS.ProcessEnv = process.env): Promise<TerminalDriver> {
   if (process.platform !== 'darwin') return NULL_DRIVER;
