@@ -8,6 +8,8 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { api } from '../api';
 import { useActions } from '../App';
+import { openSearchPanel } from '@codemirror/search';
+import { findInFile } from './findPanel';
 import { onMarkdownClick, renderMarkdown } from './Markdown';
 
 export type EditorMode = 'edit' | 'preview' | 'split';
@@ -37,7 +39,12 @@ const theme = EditorView.theme({
   '.cm-line': { padding: '0' },
   '.cm-cursor': { borderLeftColor: 'var(--accent)', borderLeftWidth: '1.5px' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection) !important' },
-  '.cm-placeholder': { color: 'var(--text-3)' }
+  '.cm-placeholder': { color: 'var(--text-3)' },
+  '.cm-panels': { backgroundColor: 'transparent', color: 'var(--text)' },
+  '.cm-panels-top': { borderBottom: 'none' },
+  '.cm-searchMatch': { backgroundColor: 'var(--amber-soft)', outline: '1px solid var(--amber)', borderRadius: '2px' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--amber)', color: 'var(--bg)' },
+  '.cm-searchMatch-selected *': { color: 'inherit' }
 });
 
 function readMode(): EditorMode {
@@ -170,6 +177,7 @@ export function Editor({ taskId, name, version, tabs }: Props) {
           history(),
           drawSelection(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          findInFile(),
           markdown(),
           syntaxHighlighting(highlight),
           EditorView.lineWrapping,
@@ -232,6 +240,30 @@ export function Editor({ taskId, name, version, tabs }: Props) {
       stale = true;
     };
   }, [version]);
+
+  // ⌘F when the editor is not focused, or is hidden behind the preview
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.shiftKey) return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f') return;
+      const editor = view.current;
+      if (!editor || !file.current.loaded) return;
+      const target = event.target as HTMLElement | null;
+      // Another field (a dialog, the switcher) keeps its own keys
+      if (target?.closest('input, textarea, [contenteditable="true"]') && !editor.dom.contains(target)) return;
+      if (document.querySelector('dialog[open], [role="dialog"]')) return;
+      event.preventDefault();
+      if (mode !== 'preview') {
+        openSearchPanel(editor);
+        return;
+      }
+      // The source pane is hidden in preview; show it before focusing the field
+      setMode('split');
+      requestAnimationFrame(() => openSearchPanel(editor));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode]);
 
   const reload = () => {
     if (conflict === null) return;

@@ -128,6 +128,35 @@ test('edits and saves a note', async () => {
   await expect.poll(() => taskFile('SABIN-0001', 'research.md')).toContain('Saved from the end-to-end test.');
 });
 
+test('finds text in a file and steps through the matches', async () => {
+  const editor = page.locator('[data-testid="editor"] .cm-content');
+  await fs.writeFile(path.join(fixture.home, 'tasks', 'SABIN-0001', 'research.md'), '# Research\n\nalpha beta Alpha gamma alpha\n');
+  await expect(editor).toContainText('gamma');
+  await editor.click();
+  await page.keyboard.press('Meta+f');
+  const find = page.getByRole('textbox', { name: 'Find' });
+  await expect(find).toBeFocused();
+  await page.keyboard.type('alpha');
+  const count = page.locator('.cm-find-count');
+  await expect(count).toHaveText('1 of 3');
+  await expect(page.locator('.cm-searchMatch')).toHaveCount(3);
+  await page.keyboard.press('Enter');
+  await expect(count).toHaveText('2 of 3');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await expect(count).toHaveText('1 of 3');
+  await page.keyboard.press('Shift+Enter');
+  await expect(count).toHaveText('3 of 3');
+  await page.getByRole('button', { name: 'Match case' }).click();
+  await expect(count).toHaveText('2 of 2');
+  await page.keyboard.type('x');
+  await expect(find).toHaveValue('alphax');
+  await expect(count).toHaveText('No results');
+  await page.keyboard.press('Escape');
+  await expect(find).toHaveCount(0);
+  await expect(editor).toBeFocused();
+});
+
 test('task.md edits keep the frontmatter', async () => {
   await page.locator('[data-file="task.md"]').click();
   const editor = page.locator('[data-testid="editor"] .cm-content');
