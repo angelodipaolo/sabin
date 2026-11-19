@@ -7,7 +7,7 @@ import { work } from './commands/work';
 import { ls } from './commands/ls';
 import { status } from './commands/status';
 import { context } from './commands/context';
-import { repoAdd, repoLs, repoRm } from './commands/repo';
+import { repoAdd, repoLs, repoRm, repoSet } from './commands/repo';
 import { app } from './commands/app';
 import { agentState } from './commands/agent-state';
 
@@ -33,7 +33,8 @@ export function buildProgram(): Command {
     .description('Create a task (never a worktree)')
     .argument('<title>', 'Task title')
     .option('--id <id>', 'Use an external ID, e.g. ARCH-1234')
-    .option('-p, --project <slug>', 'Put the task in a project')
+    .option('-p, --project <slug>', 'Put the task in a project (default: the project of this directory)')
+    .option('--no-project', 'No project, even where one applies')
     .option('-c, --content <body>', 'Body of task.md')
     .option('--json', 'Print JSON')
     .action((title, options) => newTask(title, options));
@@ -49,7 +50,8 @@ export function buildProgram(): Command {
   program
     .command('ls')
     .description('List tasks, worktrees and agent activity')
-    .option('-p, --project <slug>', 'Only this project')
+    .option('-p, --project <slug>', 'Only this project (default: the project of this directory)')
+    .option('-P, --all-projects', 'Every project, even where one applies')
     .option('-s, --status <status>', 'Only this status')
     .option('-a, --all', 'Include completed tasks')
     .option('--json', 'Print JSON')
@@ -65,8 +67,8 @@ export function buildProgram(): Command {
 
   program
     .command('context')
-    .description("Task, files and worktrees (for agents)")
-    .argument('[id]', 'Task ID (default: the task of this worktree)')
+    .description("Task, project, files and worktrees (for agents)")
+    .argument('[id]', 'Task ID (default: the task of this worktree; none outside one)')
     .option('--json', 'Print JSON')
     .action((id, options) => context(id, options));
 
@@ -77,7 +79,15 @@ export function buildProgram(): Command {
     .command('add')
     .description('Register a repo (default: the one you are in)')
     .argument('[path]', 'Path inside the repo')
-    .action(dir => repoAdd(dir));
+    .option('-p, --project <slug>', 'Default project for work in this repo')
+    .action((dir, options) => repoAdd(dir, options));
+  repo
+    .command('set')
+    .description("Change a repo's default project")
+    .argument('<name>', 'Repo name, from `sabin repo ls`')
+    .option('-p, --project <slug>', 'Default project for work in this repo')
+    .option('--no-project', 'Clear the default; only tasks name a project')
+    .action((name, options) => repoSet(name, options));
   repo
     .command('ls')
     .description('List registered repos')

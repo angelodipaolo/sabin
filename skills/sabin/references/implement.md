@@ -4,7 +4,7 @@ Do the work, from the plan when there is one, else from the requirements.
 
 ## Start
 
-1. **Orient.** `sabin context --json`. If it errors, ask which task.
+1. **Orient.** `sabin context --json`. If it errors or `id` is null, ask which task.
 2. **Check where you are.** `workspace` must not be null: code changes happen
    in one of the task's worktrees. If it is null, stop and say so. Do not `cd`
    and do not create a worktree unless the user asks (`sabin work <ID>`).

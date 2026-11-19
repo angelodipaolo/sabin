@@ -1,12 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
-import { setTaskStatus } from '@sabin/core';
+import { setTaskStatus, setRepoProject } from '@sabin/core';
 import { newTask } from '../commands/new';
 import { work } from '../commands/work';
 import { ls, agentSummary } from '../commands/ls';
 import { context, CONTEXT_KEYS } from '../commands/context';
 import { agentState } from '../commands/agent-state';
+import { run } from '../program';
 import { sandbox, makeRepo, Sandbox } from './helpers';
 
 let box: Sandbox;
@@ -141,7 +142,94 @@ describe('sabin context', () => {
     expect(out).not.toContain('prompt');
   });
 
-  it('fails outside a worktree when no ID is given', async () => {
-    await expect(box.inDir(repo, () => context(undefined))).rejects.toThrow('Pass the ID: sabin context <id>');
+  it('answers outside a worktree with no task and no guessed project', async () => {
+    await box.inDir(repo, () => context(undefined, { json: true }));
+    const result = JSON.parse(box.out());
+    expect(Object.keys(result)).toEqual([...CONTEXT_KEYS]);
+    expect(result).toMatchObject({
+      id: null, title: null, status: null, project: null, projectSource: null, projectRepos: [],
+      candidateProjects: ['web'], repo: 'site', taskDir: null, plan: null, notes: [], workspaces: [], workspace: null
+    });
+    box.clear();
+
+    await box.inDir(repo, () => context(undefined));
+    expect(box.out()).toContain("No task here");
+    expect(box.out()).toContain('none. Projects with worktrees here: web');
+    expect(box.out()).toContain('sabin repo set site --project <slug>');
+    box.clear();
+
+    await box.inDir(box.root, () => context(undefined, { json: true }));
+    expect(JSON.parse(box.out())).toMatchObject({ id: null, project: null, repo: null, candidateProjects: [] });
+  });
+
+  it('takes the project from the repo default outside a worktree, and from the task inside one', async () => {
+    await setRepoProject(box.home, 'site', 'analytics');
+
+    await box.inDir(repo, () => context(undefined, { json: true }));
+    expect(JSON.parse(box.out())).toMatchObject({
+      id: null, project: 'analytics', projectSource: 'repo', projectRepos: ['site'], candidateProjects: [], repo: 'site'
+    });
+    box.clear();
+
+    await box.inDir(repo, () => context(undefined));
+    expect(box.out()).toContain('analytics (repo default)');
+    expect(box.out()).toContain('1 open. List them with: sabin ls');
+    box.clear();
+
+    // The worktree's task wins over the repo default
+    await box.inDir(tree, () => context(undefined, { json: true }));
+    expect(JSON.parse(box.out())).toMatchObject({ id: 'TASK-0001', project: 'web', projectSource: 'task', projectRepos: ['site'] });
+    box.clear();
+
+    // A named task answers with its own project, wherever you stand
+    await box.inDir(tree, () => context('ARCH-1234', { json: true }));
+    expect(JSON.parse(box.out())).toMatchObject({ id: 'ARCH-1234', project: 'analytics', projectSource: 'task', workspace: null });
+  });
+});
+
+describe('the project of the cwd', () => {
+  it('scopes ls inside a worktree, and --all-projects or -p override it', async () => {
+    await box.inDir(tree, () => ls());
+    expect(box.out()).toContain('TASK-0001');
+    expect(box.out()).not.toContain('ARCH-1234');
+    expect(box.out()).toContain('Project web (from TASK-0001); every project: --all-projects');
+    box.clear();
+
+    await box.inDir(tree, () => ls({ allProjects: true }));
+    expect(box.out()).toContain('ARCH-1234');
+    box.clear();
+
+    await box.inDir(tree, () => ls({ project: 'analytics', json: true }));
+    expect(JSON.parse(box.out()).map((task: any) => task.id)).toEqual(['ARCH-1234']);
+    box.clear();
+
+    // The main clone with no default lists everything
+    await box.inDir(repo, () => ls());
+    expect(box.out()).toContain('ARCH-1234');
+    expect(box.out()).toContain('TASK-0001');
+    box.clear();
+
+    await setRepoProject(box.home, 'site', 'empty');
+    await box.inDir(repo, () => ls());
+    expect(box.out()).toContain('No tasks (completed hidden, project empty, default of repo site).');
+    expect(box.out()).toContain('sabin ls --all-projects');
+  });
+
+  it('defaults the project of a new task, unless --no-project', async () => {
+    await setRepoProject(box.home, 'site', 'analytics');
+    await box.inDir(repo, () => run(['node', 'sabin', 'new', 'From the clone', '--json']));
+    expect(JSON.parse(box.out()).project).toBe('analytics');
+    box.clear();
+
+    await box.inDir(tree, () => newTask('From the worktree'));
+    expect(box.out()).toContain('web (from TASK-0001; --no-project to skip)');
+    box.clear();
+
+    await box.inDir(repo, () => run(['node', 'sabin', 'new', 'Loose', '--no-project', '--json']));
+    expect(JSON.parse(box.out()).project).toBeNull();
+    box.clear();
+
+    await box.inDir(repo, () => run(['node', 'sabin', 'new', 'Named', '-p', 'web', '--json']));
+    expect(JSON.parse(box.out()).project).toBe('web');
   });
 });

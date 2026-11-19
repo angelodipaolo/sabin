@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { readConfig, writeConfig, defaultConfig, addRepo, removeRepo, listRepos, repoForPath, findRepo } from '../config';
+import { readConfig, writeConfig, defaultConfig, addRepo, removeRepo, listRepos, repoForPath, findRepo, setRepoProject } from '../config';
 import { resolveHome, ensureHome, homePaths } from '../home';
 import { readHook, findHook, hookPath } from '../hooks';
 import { tempDir, makeRepo, addWorktree } from './helpers';
@@ -98,7 +98,7 @@ describe('repo registry', () => {
 
   it('resolves worktreesRoot relative to the repo, and keeps postCreate', async () => {
     const config = { ...defaultConfig(), repos: { a: { path: '/r/a', worktreesRoot: '.worktrees', postCreate: ['npm ci'] }, broken: {} as any } };
-    expect(listRepos(config)).toEqual([{ name: 'a', path: '/r/a', worktreesRoot: '/r/a/.worktrees', postCreate: ['npm ci'] }]);
+    expect(listRepos(config)).toEqual([{ name: 'a', path: '/r/a', worktreesRoot: '/r/a/.worktrees', postCreate: ['npm ci'], project: null }]);
     expect(findRepo(config, 'broken')).toBeNull();
   });
 
@@ -113,6 +113,30 @@ describe('repo registry', () => {
     expect((await repoForPath(config, elsewhere))?.name).toBe('svc');
     expect(await repoForPath(config, other)).toBeNull();
     expect(await repoForPath(config, root)).toBeNull();
+  });
+
+  it('sets, normalises and clears a default project, keeping the rest of the entry', async () => {
+    const repo = await makeRepo(root, 'game');
+    const added = await addRepo(home, repo, { project: 'Game Explorer' });
+    expect(added).toMatchObject({ added: true, repo: { name: 'game', project: 'game-explorer' } });
+
+    // Registering again with a project updates the default
+    const again = await addRepo(home, repo, { project: 'other' });
+    expect(again).toMatchObject({ added: false, repo: { project: 'other' } });
+    expect((await addRepo(home, repo)).repo.project).toBe('other');
+
+    const config = await readConfig(home);
+    config.repos.game.postCreate = ['npm ci'];
+    await writeConfig(home, config);
+
+    expect((await setRepoProject(home, 'game', 'arcade')).project).toBe('arcade');
+    expect((await readConfig(home)).repos.game).toEqual({ path: repo, postCreate: ['npm ci'], project: 'arcade' });
+    expect((await setRepoProject(home, 'game', null)).project).toBeNull();
+    expect((await readConfig(home)).repos.game).toEqual({ path: repo, postCreate: ['npm ci'] });
+
+    await expect(setRepoProject(home, 'gone', 'x')).rejects.toMatchObject({ code: 'REPO_NOT_FOUND' });
+    await expect(setRepoProject(home, 'game', '!!')).rejects.toMatchObject({ code: 'INVALID_PROJECT' });
+    await expect(addRepo(home, repo, { project: '' })).rejects.toMatchObject({ code: 'INVALID_PROJECT' });
   });
 
   it('writes config atomically and readably', async () => {

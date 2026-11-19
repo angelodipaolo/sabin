@@ -88,6 +88,21 @@ test('filters by project from the sidebar', async () => {
   await page.locator('[data-filter="all"]').click();
 });
 
+test('links a repo to a default project and shows the repos a project spans', async () => {
+  // A native menu cannot be clicked from a test; set the choice it would make
+  const result = await page.evaluate(() => (window as any).sabin.setRepoProject('api', 'docs-site'));
+  expect(result).toEqual({ ok: true, value: undefined });
+  await expect(page.locator('[data-repo="api"] .side-repo-project')).toHaveText('Docs Site');
+  expect(JSON.parse(await fs.readFile(path.join(fixture.home, 'config.json'), 'utf8')).repos.api.project).toBe('docs-site');
+
+  await page.locator('[data-filter="docs-site"]').click();
+  await expect(page.locator('[data-testid="project-repos"]')).toContainText('api');
+
+  await page.evaluate(() => (window as any).sabin.setRepoProject('api', null));
+  await expect(page.locator('[data-repo="api"] .side-repo-project')).toHaveCount(0);
+  await page.locator('[data-filter="all"]').click();
+});
+
 test('opens a task from the keyboard', async () => {
   await page.locator('.list-scroll').click({ position: { x: 5, y: 5 } }).catch(() => undefined);
   await page.keyboard.press('ArrowDown');

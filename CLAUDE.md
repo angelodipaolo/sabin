@@ -70,7 +70,7 @@ same place whatever directory they run in.
 ```
 
 **config.json**: `idPrefix`, `idPadding`, `branch: { prefix, template }`, and `repos: { <name>: {
-path, worktreesRoot?, postCreate? } }`. A missing file is defaults; an unparsable one is an error,
+path, worktreesRoot?, postCreate?, project? } }`. A missing file is defaults; an unparsable one is an error,
 never a silent fallback - a defaulted prefix would allocate IDs under the wrong name and an empty
 registry would make every workspace vanish. A repo's name is its directory basename, with `-2`,
 `-3` on a collision; `worktreesRoot` is relative to the repo unless absolute, default
@@ -86,7 +86,17 @@ Status lives in the frontmatter only; nothing moves on disk. Every status write 
 A task has no repo, branch, worktree or slug field.
 
 **Project.** Optional grouping, independent of repos. A task names one with `project: <slug>`. A
-project exists if `projects/<slug>.md` exists **or** any task names the slug.
+project exists if `projects/<slug>.md` exists **or** any task names the slug. A project's repos are
+derived (`reposForProject()`): every repo where one of its tasks has a worktree, plus every repo
+whose `project` default names it. So a project spans any number of repos, and a monorepo serves
+any number of projects.
+
+**Project of a directory** (`projectForPath()`), most specific first: the task whose worktree holds
+it, when that task names a project; else the registered repo's `project` default; else none, with
+`candidates` (the projects of tasks with worktrees in that repo) and never a guess. The repo
+default is a default, not a constraint: a monorepo shared by several projects leaves it unset and
+answers through each worktree's task. `context`, `ls` and `new` use it when no ID or `--project`
+is given.
 
 **Workspace** - derived, never recorded. One git worktree, in one registered repo, whose branch name
 contains a known task ID: case-insensitive, and bounded so `ARCH-12` matches neither `ARCH-123` nor
@@ -116,14 +126,14 @@ PR" arrives from the command the agent had to run anyway.
 | File | Owns |
 | --- | --- |
 | `home.ts` | `resolveHome`, `homePaths`, `ensureHome` |
-| `config.ts` | `readConfig`/`writeConfig`, the repo registry: `listRepos`, `findRepo`, `repoForPath`, `addRepo`, `removeRepo` |
+| `config.ts` | `readConfig`/`writeConfig`, the repo registry: `listRepos`, `findRepo`, `repoForPath`, `addRepo`, `removeRepo`, `setRepoProject` |
 | `ids.ts` | `parseTaskId`, `TASK_ID_PATTERN`, `compareTaskIds`, `taskIdFromBranch` |
 | `taskFiles.ts` | paths inside a task directory; `findPlan`, `findLog`, `listNotes` |
 | `tasks.ts` | `listTasks`, `findTask`/`getTask`, `createTask`, `setTaskStatus`, `updateTask`, `nextTaskId` |
 | `projects.ts` | `listProjects`, `findProject`, `createProject` |
 | `hooks.ts` | `hookPath`, `findHook` (text and file), `readHook` |
 | `git.ts` | `listWorktrees`, `mainWorktreeRoot`, `currentBranch`, `addWorktree` |
-| `workspaces.ts` | `listWorkspaces`, `workspacesForTask`, `workspaceForPath`, `createWorkspace`, `workspaceGitStatus` |
+| `workspaces.ts` | `listWorkspaces`, `workspacesForTask`, `workspaceForPath`, `projectForPath`, `reposForProject`, `createWorkspace`, `workspaceGitStatus` |
 | `agentSessions.ts` | `recordAgentEvent` (never throws, never prints), `readAgentSessions`, `sweepAgentSessions`, `sessionsByTask` |
 | `agentIntegration.ts` | merges the prompt deny rule and activity hooks into settings files whose paths the caller chooses |
 | `terminal/` | the iTerm2 driver and the `ps`/`lsof` process reader |
@@ -145,12 +155,12 @@ command under `commands/`. `cli.ts` holds the shared pieces: `CliError`/`fail()`
 | Command | Does |
 | --- | --- |
 | `setup [--hooks]` | Creates the home and config; installs the skill for Claude Code (`$CLAUDE_CONFIG_DIR` or `~/.claude`, `/skills/sabin`) and Codex (`~/.agents/skills/sabin`); writes the `prompt.md` deny rule to Claude Code's `settings.json`; removes what the old installer left (`commands/sabin-*.md`, `$CODEX_HOME/skills/sabin`). `--hooks` merges activity hooks into Claude Code's `settings.json` and `$CODEX_HOME/hooks.json`. |
-| `new "<title>" [--id] [-p <project>] [-c <body>] [--json]` | Creates the task directory, `task.md` and `prompt.md`. Never a worktree. |
+| `new "<title>" [--id] [-p <project> \| --no-project] [-c <body>] [--json]` | Creates the task directory, `task.md` and `prompt.md`. Never a worktree. Without `-p`, the project of the cwd. |
 | `work [id] [-r <repo>] [--json]` | Creates the task's worktree in the repo of the cwd (registering it on first use) or `--repo`; runs `postCreate`. |
-| `ls [-p <project>] [-s <status>] [-a] [--json]` | Every task: id, status, project, title, repos with a workspace, the most urgent live agent. Completed hidden unless `--all`. |
+| `ls [-p <project> \| -P] [-s <status>] [-a] [--json]` | Every task: id, status, project, title, repos with a workspace, the most urgent live agent. Completed hidden unless `--all`. Without `-p`, only the project of the cwd when one applies; `-P, --all-projects` turns that off. |
 | `status [id] <status>` | The status write; prints the hook (per-repo first). |
-| `context [id] [--json]` | The agent's orienting call. Keys: `id, title, status, project, home, taskDir, taskFile, plan, log, notes, workspaces, workspace`. Never `prompt.md`. |
-| `repo add [path]` / `repo ls` / `repo rm <name>` | The registry. `rm` touches nothing on disk. |
+| `context [id] [--json]` | The agent's orienting call. Keys: `id, title, status, project, projectSource, projectRepos, candidateProjects, repo, home, taskDir, taskFile, plan, log, notes, workspaces, workspace`. Never `prompt.md`. Outside a task's worktree it answers with `id: null` and the project of the cwd, not an error. |
+| `repo add [path] [-p <project>]` / `repo set <name> (-p <project> \| --no-project)` / `repo ls` / `repo rm <name>` | The registry and each repo's default project. `rm` touches nothing on disk. |
 | `app [-t <id>]` | `open -a` an installed `Sabin.app` (`/Applications`, then `~/Applications`), else the dev launcher `packages/app/bin/sabin-app.js` with node, detached. |
 | `agent-state` | Hidden; what the hooks run. |
 
@@ -180,7 +190,8 @@ Files are the truth; the app holds no state of its own beyond window layout. It 
 through core, like the CLI.
 
 - **Sidebar:** All tasks, each project with open-task counts, "No project", and the repo list with
-  add/remove.
+  add/remove. Clicking a repo opens a native menu to pick its default project. A selected project's
+  header lists the repos it spans.
 - **Home is an attention list**, not a board, filtered by the selected project: *Needs you* (an agent
   waiting, longest wait first; then tasks in `review`), *Working*, *In progress*, *Ready*, *Open*,
   *Completed* (folded). A row shows the ID, title, project, a chip per workspace (repo, dirty/ahead),
@@ -239,7 +250,9 @@ Nothing in the tests sends Apple Events.
 (`task-create`, `plan`, `implement`, `review`, `handoff`, `complete`, `migrate`) and loads only when
 asked for. `sabin setup` installs the same files for Claude Code and Codex.
 
-Rules the skill enforces: orient with `sabin context --json` and stop if it errors; durable output
+Rules the skill enforces: orient with `sabin context --json` and stop if it errors or `id` is null
+when the work needs a task; "all tasks" means the project of the cwd, and a null project is a
+question for the user, never a guess; durable output
 in `taskDir`, one `plan.md`; status only through `sabin status`, `review` is the agent's ceiling and
 `completed` needs explicit approval; follow the printed hook; never read `prompt.md` (also denied by
 the rule `setup` writes); never create a worktree unless asked.

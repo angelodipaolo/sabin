@@ -44,6 +44,12 @@ export interface RepoConfig {
   worktreesRoot?: string;
   /** Shell commands run inside a freshly created worktree */
   postCreate?: string[];
+  /**
+   * Default project slug for work in this repo when no task says otherwise.
+   * A default, never a constraint: a repo shared by several projects leaves it
+   * unset, and a project can span any number of repos.
+   */
+  project?: string;
 }
 
 export interface SabinConfig {
@@ -60,4 +66,6 @@ export interface Repo {
   path: string;
   worktreesRoot: string;
   postCreate: string[];
+  /** Default project slug, or null */
+  project: string | null;
 }

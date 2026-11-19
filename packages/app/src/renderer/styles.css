@@ -122,6 +122,7 @@ code { font-size: 0.92em; padding: 0.5px 4px; border-radius: 4px; background: va
   border-bottom: 0.5px solid var(--hairline-strong); -webkit-app-region: drag;
 }
 .toolbar-title { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar-repos { margin-left: 10px; font: 400 12px var(--mono); color: var(--text-3); letter-spacing: 0; }
 .toolbar-actions { display: flex; gap: 6px; align-items: center; }
 .switcher-hint { gap: 6px; }
 .switcher-hint .kbd { margin-left: 2px; }
@@ -157,8 +158,13 @@ code { font-size: 0.92em; padding: 0.5px 4px; border-radius: 4px; background: va
 .side-repo { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 6px; }
 .side-repo:hover { background: var(--hover); }
 .side-repo:hover .side-remove { opacity: 1; }
-.side-repo-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.side-repo-text {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: default;
+}
 .side-repo-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-repo-project { margin-left: 6px; font-size: 11px; color: var(--text-3); }
+.side-repo-project::before { content: '→ '; }
 .side-repo-path {
   font: 11px var(--mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   direction: rtl; text-align: left;

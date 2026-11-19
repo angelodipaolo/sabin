@@ -26,8 +26,13 @@ sabin new "<title>" -c "<requirements and acceptance criteria>" --json
 ```
 
 - An external ticket keeps its ID: `--id ARCH-1234`.
-- A task that belongs to a project: `--project <slug>`. `sabin ls --json`
-  shows the projects already in use; ask before inventing a new one.
+- The project: without `--project`, the task joins the project of the
+  directory you are in (see "Projects" in `SKILL.md`), and the output says
+  so. Pass `--project <slug>` to choose another, or `--no-project` for none.
+  When `sabin context --json` has `project: null`, ask which one:
+  `candidateProjects` lists the projects already working in this repo, and
+  `sabin ls --all-projects --json` shows every project in use. Ask before
+  inventing a new one.
 
 The JSON gives `id` and `taskDir`. Research that informed the task can go
 straight into `taskDir` as its own note.

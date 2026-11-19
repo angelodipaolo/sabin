@@ -4,7 +4,8 @@ import { Repo, RepoConfig, SabinConfig } from './types';
 import { writeFileAtomic, realpathOr } from './fs';
 import { mainWorktreeRoot } from './git';
 import { withLock } from './lock';
-import { NotAGitRepoError, RepoNotFoundError } from './errors';
+import { parseProjectSlug } from './slug';
+import { InvalidProjectError, NotAGitRepoError, RepoNotFoundError } from './errors';
 
 export const DEFAULT_BRANCH_TEMPLATE = '{prefix}/{id}-{slug}';
 
@@ -76,7 +77,8 @@ export function resolveRepo(name: string, entry: RepoConfig | undefined): Repo |
     name,
     path: repoPath,
     worktreesRoot: root,
-    postCreate: Array.isArray(entry.postCreate) ? entry.postCreate.filter(c => typeof c === 'string') : []
+    postCreate: Array.isArray(entry.postCreate) ? entry.postCreate.filter(c => typeof c === 'string') : [],
+    project: typeof entry.project === 'string' ? parseProjectSlug(entry.project) : null
   };
 }
 
@@ -114,6 +116,18 @@ export interface AddRepoResult {
   added: boolean;
 }
 
+export interface AddRepoOptions {
+  /** Set the repo's default project; applies to an already registered repo too */
+  project?: string;
+}
+
+/** A project slug for config.json, or InvalidProjectError */
+function projectSlugOrThrow(input: string): string {
+  const slug = parseProjectSlug(input);
+  if (!slug) throw new InvalidProjectError(input);
+  return slug;
+}
+
 /**
  * Register the repo containing `dir`.
  *
@@ -121,7 +135,8 @@ export interface AddRepoResult {
  * there. The name is the directory's basename, with `-2`, `-3` appended on a
  * collision. Registering the same clone twice returns the existing entry.
  */
-export async function addRepo(home: string, dir: string): Promise<AddRepoResult> {
+export async function addRepo(home: string, dir: string, options: AddRepoOptions = {}): Promise<AddRepoResult> {
+  const project = options.project === undefined ? undefined : projectSlugOrThrow(options.project);
   const main = await mainWorktreeRoot(dir);
   if (!main) throw new NotAGitRepoError(dir);
   const repoPath = await realpathOr(main);
@@ -130,11 +145,15 @@ export async function addRepo(home: string, dir: string): Promise<AddRepoResult>
     const config = await readConfig(home);
 
     for (const repo of listRepos(config)) {
-      if ((await realpathOr(repo.path)) === repoPath) return { repo, added: false };
+      if ((await realpathOr(repo.path)) !== repoPath) continue;
+      if (project === undefined || repo.project === project) return { repo, added: false };
+      config.repos[repo.name] = { ...config.repos[repo.name], project };
+      await writeConfig(home, config);
+      return { repo: resolveRepo(repo.name, config.repos[repo.name])!, added: false };
     }
 
     const name = uniqueRepoName(path.basename(repoPath), config.repos);
-    config.repos[name] = { path: repoPath };
+    config.repos[name] = project ? { path: repoPath, project } : { path: repoPath };
     await writeConfig(home, config);
 
     return { repo: resolveRepo(name, config.repos[name])!, added: true };
@@ -151,6 +170,26 @@ export async function removeRepo(home: string, name: string): Promise<Repo> {
     delete config.repos[name];
     await writeConfig(home, config);
     return repo;
+  });
+}
+
+/**
+ * Set or clear a repo's default project. Keeps every other key of the entry.
+ * The project need not exist yet: like a task's `project`, naming it is
+ * enough.
+ */
+export async function setRepoProject(home: string, name: string, project: string | null): Promise<Repo> {
+  const slug = project === null ? null : projectSlugOrThrow(project);
+  return withLock(home, async () => {
+    const config = await readConfig(home);
+    if (!findRepo(config, name) || !(name in config.repos)) throw new RepoNotFoundError(name);
+
+    const entry = { ...config.repos[name] };
+    if (slug) entry.project = slug;
+    else delete entry.project;
+    config.repos[name] = entry;
+    await writeConfig(home, config);
+    return resolveRepo(name, config.repos[name])!;
   });
 }
 

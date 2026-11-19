@@ -1,6 +1,6 @@
 ---
 name: sabin
-description: Use for any work on a Sabin task. Sabin keeps every task in one home directory ($SABIN_HOME, else ~/sabin) - tasks/<ID>/ holds task.md, plan.md, log.md and notes - and finds each task's git worktrees, in any number of repos, by the task ID in the branch name. Triggers on a task ID such as TASK-0012 or ARCH-1234, "the task", "the plan", "our notes", "save this to notes", "write the handoff", "update the log", "create a task", "review this", "mark it complete", "ship it", "migrate the old .sabin directory", and on any task status change.
+description: Use for any work on a Sabin task. Sabin keeps every task in one home directory ($SABIN_HOME, else ~/sabin) - tasks/<ID>/ holds task.md, plan.md, log.md and notes - and finds each task's git worktrees, in any number of repos, by the task ID in the branch name. Triggers on a task ID such as TASK-0012 or ARCH-1234, "the task", "the plan", "our notes", "save this to notes", "write the handoff", "update the log", "create a task", "list the tasks", "tasks for this project", "review this", "mark it complete", "ship it", "migrate the old .sabin directory", and on any task status change.
 ---
 
 # Sabin
@@ -13,14 +13,16 @@ in a terminal, usually inside one of the task's worktrees.
   yours), `plan.md`, `log.md`, and any other notes.
 - A **workspace** is a git worktree whose branch name contains the task ID. A
   task can have one in several repos. Nothing records them; git does.
+- A **project** groups tasks. A task names at most one. A project can span
+  several repos, and one repo can serve several projects.
 
 Never guess a path and never hardcode `~/sabin`. Ask the CLI.
 
 ## Orient first
 
 ```bash
-sabin context --json            # inside the task's worktree
-sabin context <ID> --json       # anywhere else
+sabin context --json            # inside the task's worktree, or anywhere for the project
+sabin context <ID> --json       # a named task, wherever you are
 ```
 
 ```json
@@ -29,6 +31,10 @@ sabin context <ID> --json       # anywhere else
   "title": "Partition the events table",
   "status": "in_progress",
   "project": "analytics",
+  "projectSource": "task",
+  "projectRepos": ["api", "web"],
+  "candidateProjects": [],
+  "repo": "api",
   "home": "/Users/me/sabin",
   "taskDir": "/Users/me/sabin/tasks/ARCH-1234",
   "taskFile": "/Users/me/sabin/tasks/ARCH-1234/task.md",
@@ -40,9 +46,31 @@ sabin context <ID> --json       # anywhere else
 }
 ```
 
-`workspace` is the worktree you are standing in, or `null`. **If the command
-errors, stop and ask which task.** Writing into the wrong task is worse than not
+`workspace` is the worktree you are standing in, or `null`. Outside every
+task's worktree the command still answers, with `id` and the task fields
+`null`. **If the command errors, or the work needs a task and `id` is null,
+stop and ask which task.** Writing into the wrong task is worse than not
 writing.
+
+## Projects
+
+`project` is the project of the directory you are in. `projectSource` says
+where it came from:
+
+- `task`: the task whose worktree you are in names it. This holds in a
+  monorepo shared by many projects, because the branch names one task.
+- `repo`: the registered repo's default project (`sabin repo set <name>
+  --project <slug>`), used outside a task's worktree.
+- `null`: nothing names one. `candidateProjects` lists the projects with
+  worktrees in this repo. Ask which one; never pick for the user.
+
+`projectRepos` is every repo the project spans. `repo` is the registered repo
+you are in, or `null`.
+
+"All tasks", "the tasks for this project" and similar mean the project's
+tasks: `sabin ls --json` already uses the project of the cwd. Add `--all` to
+include completed tasks, `--project <slug>` for another project, and
+`--all-projects` for every task in the home.
 
 ## What you are asked to do
 
@@ -108,9 +136,9 @@ Reading, planning and writing notes need no worktree.
 
 | Command | Use |
 | --- | --- |
-| `sabin context [ID] --json` | Orient: task, files, worktrees |
+| `sabin context [ID] --json` | Orient: task, project, files, worktrees |
 | `sabin status [ID] <status>` | Change status; prints the hook |
-| `sabin new "<title>" [--id ARCH-1234] [--project <slug>] [-c <body>] [--json]` | Create a task |
+| `sabin new "<title>" [--id ARCH-1234] [--project <slug> \| --no-project] [-c <body>] [--json]` | Create a task (default: the project of the cwd) |
 | `sabin work [ID] [--repo <name>]` | Create the task's worktree (only when asked) |
-| `sabin ls [--all] [--status <s>] [--project <slug>] [--json]` | Every task, its worktrees and agents |
-| `sabin repo ls` | Registered repos |
+| `sabin ls [--all] [--status <s>] [--project <slug> \| --all-projects] [--json]` | Tasks of the cwd's project (else every task), their worktrees and agents |
+| `sabin repo ls` | Registered repos and their default projects |

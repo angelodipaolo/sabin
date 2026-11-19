@@ -20,7 +20,7 @@ using it.
 
 ## Review pass
 
-1. **Orient.** `sabin context --json`. Read `taskFile`, the plan (its success
+1. **Orient.** `sabin context --json`; if `id` is null, ask which task. Read `taskFile`, the plan (its success
    criteria are the bar), the end of `log.md`, and every existing finding
    (`review.md`, or `rede threads --all`). Do not file a finding twice.
 2. **Read the uncommitted work**, in each workspace of the task:

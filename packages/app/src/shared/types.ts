@@ -69,6 +69,8 @@ export interface ProjectInfo {
   open: number;
   total: number;
   hasFile: boolean;
+  /** Repos the project spans: where its tasks have worktrees, plus repos defaulting to it */
+  repos: string[];
 }
 
 export interface RepoInfo {
@@ -76,6 +78,8 @@ export interface RepoInfo {
   path: string;
   /** False when the path is gone */
   exists: boolean;
+  /** Default project for work in this repo, or null */
+  project: string | null;
 }
 
 export interface Snapshot {
@@ -150,6 +154,9 @@ export interface SabinApi {
   createProject(title: string): Promise<Result<string>>;
   addRepo(): Promise<Result<string | null>>;
   removeRepo(name: string): Promise<Result<boolean>>;
+  /** A native menu of projects for the repo's default; resolves to the slug, '' for none, or null when dismissed */
+  repoProjectMenu(name: string): Promise<string | null>;
+  setRepoProject(name: string, project: string | null): Promise<Result>;
   createWorkspace(taskId: string, repo: string): Promise<Result<string>>;
 
   listFiles(taskId: string): Promise<Result<TaskFileEntry[]>>;

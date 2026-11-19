@@ -35,6 +35,7 @@ export function AttentionList({ snapshot, filter, now, active }: Props) {
   const hasTasksAtAll = snapshot.tasks.length > 0;
   const filtered = snapshot.tasks.filter(task => matchesFilter(task, filter));
   const projectSlug = filter.kind === 'project' ? filter.slug : undefined;
+  const projectRepos = projectSlug ? snapshot.projects.find(project => project.slug === projectSlug)?.repos ?? [] : [];
   // The ID column fits the longest ID in view, so long prefixes such as GAMEMANAGE-0001 are not cut
   const idChars = Math.min(24, Math.max(9, ...filtered.map(task => task.id.length)));
 
@@ -76,7 +77,10 @@ export function AttentionList({ snapshot, filter, now, active }: Props) {
   return (
     <section class="list-view">
       <header class="toolbar">
-        <h1 class="toolbar-title">{filterTitle(snapshot, filter)}</h1>
+        <h1 class="toolbar-title">
+          {filterTitle(snapshot, filter)}
+          {projectRepos.length > 0 && <span class="toolbar-repos" data-testid="project-repos">{projectRepos.join(' · ')}</span>}
+        </h1>
         <div class="toolbar-actions">
           <Button kind="ghost" class="switcher-hint" onClick={actions.openSwitcher} title="Go to Task (⌘K)">
             <Icon name="search" size={13} />

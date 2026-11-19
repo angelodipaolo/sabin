@@ -29,6 +29,8 @@ const api: SabinApi = {
   createProject: title => invoke('project:create', title),
   addRepo: () => invoke('repo:add'),
   removeRepo: name => invoke('repo:remove', name),
+  repoProjectMenu: name => invoke('repo:projectMenu', name),
+  setRepoProject: (name, project) => invoke('repo:setProject', name, project),
   createWorkspace: (taskId, repo) => invoke('workspace:create', taskId, repo),
 
   listFiles: taskId => invoke('file:list', taskId),

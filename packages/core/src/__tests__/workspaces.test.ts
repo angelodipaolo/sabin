@@ -7,10 +7,12 @@ import {
   createWorkspace,
   branchNameFor,
   workspaceGitStatus,
-  parseGitStatus
+  parseGitStatus,
+  projectForPath,
+  reposForProject
 } from '../workspaces';
-import { addRepo, readConfig, findRepo, defaultConfig } from '../config';
-import { SabinConfig } from '../types';
+import { addRepo, readConfig, findRepo, defaultConfig, listRepos } from '../config';
+import { SabinConfig, Task } from '../types';
 import { tempDir, makeRepo, addWorktree, git } from './helpers';
 
 let root: string;
@@ -157,5 +159,52 @@ describe('workspaceGitStatus', () => {
 
   it('parses a detached head', () => {
     expect(parseGitStatus('# branch.oid abc\n# branch.head (detached)\n? x\n').branch).toBeNull();
+  });
+});
+
+describe('project for a path', () => {
+  const task = (id: string, project?: string): Task => ({
+    id, title: id, status: 'open', project, content: '', dir: `/t/${id}`, file: `/t/${id}/task.md`, promptFile: `/t/${id}/prompt.md`
+  });
+
+  it('prefers the task of the worktree, then the repo default, else offers candidates', async () => {
+    const mono = await makeRepo(root, 'mono');
+    const game = await makeRepo(root, 'game');
+    const monoA = await addWorktree(mono, path.join(root, 'mono-worktrees', 'X-1-a'), 'me/X-1-a');
+    const monoB = await addWorktree(mono, path.join(root, 'mono-worktrees', 'X-2-b'), 'me/X-2-b');
+    const monoC = await addWorktree(mono, path.join(root, 'mono-worktrees', 'X-3-c'), 'me/X-3-c');
+    const gameTree = await addWorktree(game, path.join(root, 'game-worktrees', 'X-4-d'), 'me/X-4-d');
+    await addRepo(home, mono);
+    await addRepo(home, game, { project: 'games' });
+    const config = await readConfig(home);
+    const tasks = [task('X-1', 'billing'), task('X-2', 'search'), task('X-3'), task('X-4'), task('X-5', 'games')];
+
+    // A monorepo shared by projects: each worktree answers through its task
+    expect(await projectForPath(config, tasks, monoA)).toMatchObject({ project: 'billing', source: 'task', taskId: 'X-1', candidates: [] });
+    await fs.mkdir(path.join(monoB, 'sub'));
+    expect((await projectForPath(config, tasks, path.join(monoB, 'sub'))).project).toBe('search');
+
+    // The main clone of a repo with no default: no guess, only candidates
+    expect(await projectForPath(config, tasks, mono)).toMatchObject({
+      project: null, source: null, taskId: null, repo: { name: 'mono' }, candidates: ['billing', 'search']
+    });
+    // A task without a project, in a repo without a default
+    expect(await projectForPath(config, tasks, monoC)).toMatchObject({ project: null, taskId: 'X-3' });
+
+    // The repo default covers its main clone and a task without a project
+    expect(await projectForPath(config, tasks, game)).toMatchObject({ project: 'games', source: 'repo', taskId: null });
+    expect(await projectForPath(config, tasks, gameTree)).toMatchObject({ project: 'games', source: 'repo', taskId: 'X-4' });
+
+    // Outside every registered repo
+    expect(await projectForPath(config, tasks, root)).toEqual({ project: null, source: null, taskId: null, repo: null, candidates: [] });
+
+    // A project spans the repos its tasks have worktrees in, plus repos defaulting to it
+    const workspaces = await listWorkspaces(config, tasks);
+    expect(reposForProject('billing', tasks, workspaces, [])).toEqual(['mono']);
+    const multi = [...tasks, task('X-6', 'billing')];
+    await addWorktree(game, path.join(root, 'game-worktrees', 'X-6-e'), 'me/X-6-e');
+    const all = await listWorkspaces(config, multi);
+    expect(reposForProject('billing', multi, all, [])).toEqual(['game', 'mono']);
+    expect(reposForProject('games', multi, all, listRepos(config))).toEqual(['game']);
   });
 });

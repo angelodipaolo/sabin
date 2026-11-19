@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
 import { readConfig, readAgentSessions } from '@sabin/core';
-import { repoAdd, repoLs, repoRm } from '../commands/repo';
+import { repoAdd, repoLs, repoRm, repoSet } from '../commands/repo';
 import { app } from '../commands/app';
 import { agentState } from '../commands/agent-state';
 import { run } from '../program';
@@ -39,6 +39,29 @@ describe('sabin repo', () => {
 
     await expect(repoRm('tools')).rejects.toThrow('No registered repo named "tools"');
     await expect(repoAdd(box.root)).rejects.toThrow('Not a git repository');
+  });
+
+  it('sets and clears a default project', async () => {
+    const repo = await makeRepo(box.root, 'game');
+    await repoAdd(repo, { project: 'Game Explorer' });
+    expect(box.out()).toContain('Project:   game-explorer');
+    box.clear();
+
+    await repoLs();
+    expect(box.out()).toContain('project game-explorer');
+    box.clear();
+
+    await run(['node', 'sabin', 'repo', 'set', 'game', '--no-project']);
+    expect(box.out()).toContain('Cleared the default project of game');
+    expect((await readConfig(box.home)).repos.game).toEqual({ path: repo });
+    box.clear();
+
+    await run(['node', 'sabin', 'repo', 'set', 'game', '-p', 'arcade']);
+    expect(box.out()).toContain('Set the default project of game to arcade');
+    expect((await readConfig(box.home)).repos.game.project).toBe('arcade');
+
+    await expect(repoSet('game')).rejects.toThrow('Nothing to set');
+    await expect(repoSet('nope', { project: 'x' })).rejects.toThrow('No registered repo named "nope"');
   });
 
   it('says how to register one when there are none', async () => {

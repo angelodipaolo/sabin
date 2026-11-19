@@ -12,7 +12,7 @@ turn.
 ## Steps
 
 1. **Orient.** `sabin context --json` (or `sabin context <ID> --json`). If it
-   errors, ask which task.
+   errors or `id` is null, ask which task.
 2. **Read what exists**: `taskFile`, then every note in `taskDir`, and the end
    of `log.md` if there is one. If `plan` is not null you are **revising**:
    keep its decisions unless the user changes them.

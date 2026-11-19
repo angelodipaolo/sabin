@@ -107,6 +107,62 @@ export async function workspaceForPath(config: SabinConfig, known: TaskIds, dir:
   return best ? toWorkspace(repo, best.worktree, idsOf(known), best.index) : null;
 }
 
+export type ProjectSource = 'task' | 'repo';
+
+/** Which project a directory belongs to, and why */
+export interface PathProject {
+  /** The project slug, or null when nothing names one */
+  project: string | null;
+  /** `task`: the project of the task whose worktree holds the directory. `repo`: the repo's default. */
+  source: ProjectSource | null;
+  /** The task whose worktree holds the directory, or null */
+  taskId: string | null;
+  /** The registered repo holding the directory, or null */
+  repo: Repo | null;
+  /**
+   * Only when `project` is null and the directory is in a registered repo:
+   * the projects of tasks with a worktree in that repo, sorted. The choices to
+   * offer, never a guess.
+   */
+  candidates: string[];
+}
+
+/**
+ * The project for work in `dir`, most specific source first:
+ *
+ * 1. The task whose worktree holds `dir`, when it names a project. A branch
+ *    maps to one task and a task to one project, so this works in a monorepo
+ *    shared by many projects.
+ * 2. Else the default `project` of the registered repo holding `dir`.
+ * 3. Else none, with the candidates to choose from.
+ */
+export async function projectForPath(config: SabinConfig, tasks: Task[], dir: string): Promise<PathProject> {
+  const repo = await repoForPath(config, dir);
+  if (!repo) return { project: null, source: null, taskId: null, repo: null, candidates: [] };
+
+  const here = await workspaceForPath(config, tasks, dir);
+  const task = here ? tasks.find(candidate => candidate.id === here.taskId) : undefined;
+  const taskId = task?.id ?? null;
+  if (task?.project) return { project: task.project, source: 'task', taskId, repo, candidates: [] };
+  if (repo.project) return { project: repo.project, source: 'repo', taskId, repo, candidates: [] };
+
+  const workspaces = await repoWorkspaces(repo, idsOf(tasks)).catch(() => [] as Workspace[]);
+  const inRepo = new Set(workspaces.map(workspace => workspace.taskId));
+  const candidates = [...new Set(tasks.filter(t => inRepo.has(t.id) && t.project).map(t => t.project!))].sort();
+  return { project: null, source: null, taskId, repo, candidates };
+}
+
+/**
+ * The repos a project spans, derived: every repo where one of its tasks has a
+ * worktree, plus every repo whose default is the project. Sorted by name.
+ */
+export function reposForProject(project: string, tasks: Task[], workspaces: Workspace[], repos: Repo[]): string[] {
+  const ids = new Set(tasks.filter(task => task.project === project).map(task => task.id));
+  const names = new Set(workspaces.filter(workspace => ids.has(workspace.taskId)).map(workspace => workspace.repo));
+  for (const repo of repos) if (repo.project === project) names.add(repo.name);
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 /**
  * The branch for a task: the configured template with {prefix}, {id} and
  * {slug} filled, tidied of what empty values leave behind.

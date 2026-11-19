@@ -54,6 +54,15 @@ export function Sidebar({ snapshot, filter, onFilter, route }: Props) {
     else if (result.value) actions.toast(`Added ${result.value}`, 'info');
   };
 
+  const chooseProject = async (name: string) => {
+    const choice = await api.repoProjectMenu(name);
+    if (choice === null) return;
+    const result = await api.setRepoProject(name, choice || null);
+    if (!result.ok) actions.toast(result.error);
+  };
+
+  const projectTitle = (slug: string) => snapshot.projects.find(project => project.slug === slug)?.title ?? slug;
+
   const removeRepo = async (name: string) => {
     const result = await api.removeRepo(name);
     if (!result.ok) actions.toast(result.error);
@@ -91,11 +100,19 @@ export function Sidebar({ snapshot, filter, onFilter, route }: Props) {
             </div>
           ) : (
             snapshot.repos.map(repo => (
-              <div class={`side-repo ${repo.exists ? '' : 'is-missing'}`} key={repo.name} title={repo.path}>
-                <div class="side-repo-text">
-                  <span class="side-repo-name">{repo.name}</span>
+              <div class={`side-repo ${repo.exists ? '' : 'is-missing'}`} key={repo.name} data-repo={repo.name} title={repo.path}>
+                <button
+                  type="button"
+                  class="side-repo-text"
+                  title={`${repo.path}\nClick to choose the default project`}
+                  onClick={() => chooseProject(repo.name)}
+                >
+                  <span class="side-repo-name">
+                    {repo.name}
+                    {repo.project && <span class="side-repo-project">{projectTitle(repo.project)}</span>}
+                  </span>
                   <span class="side-repo-path">{repo.exists ? rtlSafe(tildify(repo.path, snapshot.userHome)) : 'Path not found'}</span>
-                </div>
+                </button>
                 <button type="button" class="side-remove" title={`Remove ${repo.name}`} aria-label={`Remove ${repo.name}`} onClick={() => removeRepo(repo.name)}>
                   <Icon name="close" size={10} />
                 </button>

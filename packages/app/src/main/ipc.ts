@@ -7,10 +7,12 @@ import {
   ensureHome,
   findRepo,
   getTask,
+  listProjects,
   isTaskStatus,
   nextTaskId,
   readConfig,
   removeRepo,
+  setRepoProject,
   setTaskStatus,
   updateTask
 } from '@sabin/core';
@@ -125,6 +127,35 @@ export function registerIpc(ctx: IpcContext): void {
     if (!ok) return false;
     await removeRepo(home, repoName);
     return true;
+  }));
+  handle('repo:projectMenu', (name: unknown) => new Promise((resolvePromise, reject) => {
+    const repoName = str(name, 'a repo name');
+    Promise.all([readConfig(home), listProjects(home)]).then(([config, projects]) => {
+      const repo = findRepo(config, repoName);
+      if (!repo) return resolvePromise(null);
+      let chosen: string | null = null;
+      const pick = (value: string) => () => {
+        chosen = value;
+        resolvePromise(value);
+      };
+      const menu = Menu.buildFromTemplate([
+        { label: 'Default Project', enabled: false },
+        { label: 'None', type: 'radio', checked: repo.project === null, click: pick('') },
+        ...projects.map(project => ({
+          label: project.title, type: 'radio' as const, checked: repo.project === project.slug, click: pick(project.slug)
+        }))
+      ]);
+      menu.popup({
+        window: ctx.window() ?? undefined,
+        // Click handlers can run after the close callback; give them a tick
+        callback: () => setTimeout(() => {
+          if (chosen === null) resolvePromise(null);
+        }, 50)
+      });
+    }, reject);
+  }));
+  handle('repo:setProject', (name: unknown, project: unknown) => mutate(async () => {
+    await setRepoProject(home, str(name, 'a repo name'), project === null ? null : str(project, 'a project'));
   }));
   handle('workspace:create', (taskId: unknown, repoName: unknown) => mutate(async () => {
     const config = await readConfig(home);

@@ -16,6 +16,7 @@ import {
   parseTaskId,
   readAgentSessions,
   readConfig,
+  reposForProject,
   sessionsByTask,
   workspaceGitStatus
 } from '@sabin/core';
@@ -143,7 +144,9 @@ export async function takeSnapshot(home: string, version: number, redeAvailable:
       warnings.push(`Could not list projects: ${message(error)}`);
       return [];
     }),
-    Promise.all(repos.map(async (repo): Promise<RepoInfo> => ({ name: repo.name, path: repo.path, exists: await isDirectory(repo.path) }))),
+    Promise.all(repos.map(async (repo): Promise<RepoInfo> => ({
+      name: repo.name, path: repo.path, exists: await isDirectory(repo.path), project: repo.project
+    }))),
     listWorkspaces(config, tasks).catch(error => {
       warnings.push(`Could not list worktrees: ${message(error)}`);
       return [] as Workspace[];
@@ -195,7 +198,8 @@ export async function takeSnapshot(home: string, version: number, redeAvailable:
     title: project.title,
     open: project.total - project.counts.completed,
     total: project.total,
-    hasFile: project.file !== null
+    hasFile: project.file !== null,
+    repos: reposForProject(project.slug, tasks, workspaces, repos)
   }));
 
   return {

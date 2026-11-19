@@ -6,6 +6,7 @@ import {
   sessionsByTask,
   isTaskStatus,
   parseProjectSlug,
+  projectForPath,
   AgentSession,
   Workspace
 } from '@sabin/core';
@@ -13,6 +14,8 @@ import { loadHome, fail, printJson, elapsed, colorStatus, VALID_STATUSES } from 
 
 export interface LsOptions {
   project?: string;
+  /** Every project, even inside a repo or worktree that names one */
+  allProjects?: boolean;
   status?: string;
   all?: boolean;
   json?: boolean;
@@ -56,6 +59,9 @@ const TITLE_WIDTH = 48;
  * Every task across every repo, one aligned line each: ID, status, project,
  * title, the repos it has a worktree in, and what its agents are doing.
  * Completed tasks are hidden unless `--all` or `--status completed`.
+ *
+ * Without `--project`, the project of the cwd applies (the task of the
+ * worktree, else the repo's default); `--all-projects` turns that off.
  */
 export async function ls(options: LsOptions = {}): Promise<void> {
   if (options.status && !isTaskStatus(options.status)) {
@@ -69,6 +75,16 @@ export async function ls(options: LsOptions = {}): Promise<void> {
 
   const { home, config } = await loadHome();
   let tasks = await listTasks(home);
+
+  // Where the default came from, for the footer; null when -p was given or nothing applies
+  let implied: string | null = null;
+  if (!project && !options.allProjects) {
+    const here = await projectForPath(config, tasks, process.cwd());
+    if (here.project) {
+      project = here.project;
+      implied = here.source === 'task' ? `from ${here.taskId}` : `default of repo ${here.repo?.name}`;
+    }
+  }
   if (options.status) tasks = tasks.filter(task => task.status === options.status);
   else if (!options.all) tasks = tasks.filter(task => task.status !== 'completed');
   if (project) tasks = tasks.filter(task => task.project === project);
@@ -103,9 +119,10 @@ export async function ls(options: LsOptions = {}): Promise<void> {
   if (tasks.length === 0) {
     const filters = [
       options.status ? `status ${options.status}` : options.all ? null : 'completed hidden',
-      project ? `project ${project}` : null
+      project ? `project ${project}${implied ? `, ${implied}` : ''}` : null
     ].filter(Boolean);
     console.log(`No tasks${filters.length ? ` (${filters.join(', ')})` : ''}.`);
+    if (implied) console.log(chalk.gray('Every project: sabin ls --all-projects'));
     console.log(chalk.gray('Create one with: sabin new "<title>"'));
     return;
   }
@@ -158,4 +175,5 @@ export async function ls(options: LsOptions = {}): Promise<void> {
 
   const hidden = options.all || options.status ? '' : '  (completed hidden; --all to show)';
   console.log(chalk.gray(`${rows.length} task${rows.length === 1 ? '' : 's'}${hidden}`));
+  if (implied) console.log(chalk.gray(`Project ${project} (${implied}); every project: --all-projects`));
 }
