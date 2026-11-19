@@ -149,6 +149,18 @@ test('finds text in a file and steps through the matches', async () => {
   await expect(count).toHaveText('3 of 3');
   await page.getByRole('button', { name: 'Match case' }).click();
   await expect(count).toHaveText('2 of 2');
+  await page.keyboard.press('Meta+g');
+  await expect(count).toHaveText('1 of 2');
+  await page.keyboard.press('Meta+Shift+g');
+  await expect(count).toHaveText('2 of 2');
+  await expect(find).toBeFocused();
+  // Like a browser, ⌘G keeps stepping with the last query after the bar closes
+  await page.keyboard.press('Escape');
+  await expect(find).toHaveCount(0);
+  await page.keyboard.press('Meta+g');
+  await page.keyboard.press('Meta+f');
+  await expect(count).toHaveText('1 of 2');
+  await page.keyboard.press('End');
   await page.keyboard.type('x');
   await expect(find).toHaveValue('alphax');
   await expect(count).toHaveText('No results');

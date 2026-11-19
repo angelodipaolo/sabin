@@ -127,7 +127,8 @@ function createFindPanel(view: EditorView): Panel {
 
   input.addEventListener('input', () => commit(getSearchQuery(view.state).caseSensitive, true));
   input.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
+    const modG = (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'g';
+    if (event.key === 'Enter' || modG) {
       event.preventDefault();
       step(event.shiftKey ? findPrevious : findNext);
     } else if (event.key === 'Escape') {

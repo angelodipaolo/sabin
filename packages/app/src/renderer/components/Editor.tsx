@@ -8,7 +8,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { api } from '../api';
 import { useActions } from '../App';
-import { openSearchPanel } from '@codemirror/search';
+import { findNext, findPrevious, openSearchPanel } from '@codemirror/search';
 import { findInFile } from './findPanel';
 import { onMarkdownClick, renderMarkdown } from './Markdown';
 
@@ -241,11 +241,16 @@ export function Editor({ taskId, name, version, tabs }: Props) {
     };
   }, [version]);
 
-  // ⌘F when the editor is not focused, or is hidden behind the preview
+  // ⌘F, ⌘G and ⇧⌘G when the editor is not focused, or is hidden behind the preview.
+  // Like a browser, ⌘G keeps stepping with the last query after the find bar closes.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.shiftKey) return;
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f') return;
+      if (event.defaultPrevented || event.altKey || !(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      const command = key === 'f' && !event.shiftKey ? openSearchPanel
+        : key === 'g' ? (event.shiftKey ? findPrevious : findNext)
+        : null;
+      if (!command) return;
       const editor = view.current;
       if (!editor || !file.current.loaded) return;
       const target = event.target as HTMLElement | null;
@@ -254,12 +259,12 @@ export function Editor({ taskId, name, version, tabs }: Props) {
       if (document.querySelector('dialog[open], [role="dialog"]')) return;
       event.preventDefault();
       if (mode !== 'preview') {
-        openSearchPanel(editor);
+        command(editor);
         return;
       }
-      // The source pane is hidden in preview; show it before focusing the field
+      // The source pane is hidden in preview; show it before moving to a match
       setMode('split');
-      requestAnimationFrame(() => openSearchPanel(editor));
+      requestAnimationFrame(() => command(editor));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
